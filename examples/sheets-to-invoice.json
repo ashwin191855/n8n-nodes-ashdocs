@@ -1,0 +1,103 @@
+{
+  "name": "Google Sheets row → ASHDOCS invoice → send",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "documentId": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "sheetName": {
+          "__rl": true,
+          "mode": "list",
+          "value": ""
+        },
+        "event": "rowAdded",
+        "options": {}
+      },
+      "id": "0c7d1a52-2f0e-4b8e-9a51-6b1f3e2d4a10",
+      "name": "New Sheet Row",
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "resource": "invoice",
+        "operation": "create",
+        "customerType": "details",
+        "customerName": "={{ $json.Client }}",
+        "customerEmail": "={{ $json.Email }}",
+        "lineItemsInput": "fields",
+        "lineItems": {
+          "item": [
+            {
+              "description": "={{ $json.Description }}",
+              "quantity": "={{ $json.Quantity }}",
+              "unitPrice": "={{ $json['Unit Price'] }}"
+            }
+          ]
+        },
+        "issue": true,
+        "send": false,
+        "additionalFields": {
+          "idempotencyKey": "=sheet-row-{{ $json.row_number }}"
+        }
+      },
+      "id": "5b2e9c84-7d3a-4f61-8e0b-2c9a7f1d3e21",
+      "name": "Create Invoice",
+      "type": "n8n-nodes-ashdocs.ashdocs",
+      "typeVersion": 1,
+      "position": [260, 0]
+    },
+    {
+      "parameters": {
+        "resource": "invoice",
+        "operation": "send",
+        "invoiceId": "={{ $json.id }}",
+        "sendOptions": {}
+      },
+      "id": "9a4f7e13-1c6b-4d2a-b5e8-3f0d6a9c2b32",
+      "name": "Send Invoice",
+      "type": "n8n-nodes-ashdocs.ashdocs",
+      "typeVersion": 1,
+      "position": [520, 0]
+    }
+  ],
+  "connections": {
+    "New Sheet Row": {
+      "main": [
+        [
+          {
+            "node": "Create Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Invoice": {
+      "main": [
+        [
+          {
+            "node": "Send Invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}

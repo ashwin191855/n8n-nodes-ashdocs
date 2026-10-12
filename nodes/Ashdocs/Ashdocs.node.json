@@ -1,0 +1,10 @@
+{
+	"node": "n8n-nodes-ashdocs.ashdocs",
+	"nodeVersion": "1.0",
+	"codexVersion": "1.0",
+	"categories": ["Finance & Accounting", "Productivity"],
+	"resources": {
+		"credentialDocumentation": [{ "url": "https://www.ashdocs.com/integrations/n8n" }],
+		"primaryDocumentation": [{ "url": "https://www.ashdocs.com/integrations/n8n" }]
+	}
+}

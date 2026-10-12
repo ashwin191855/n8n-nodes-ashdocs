@@ -1,0 +1,62 @@
+{
+	"name": "n8n-nodes-ashdocs",
+	"version": "1.0.0",
+	"description": "ASHDOCS invoicing for n8n: create, send and look up invoices, manage customers, generate and redact PDFs, and trigger on invoice sent, viewed, paid and overdue.",
+	"license": "MIT",
+	"homepage": "https://github.com/ashwin191855/n8n-nodes-ashdocs#readme",
+	"bugs": {
+		"url": "https://github.com/ashwin191855/n8n-nodes-ashdocs/issues"
+	},
+	"keywords": [
+		"n8n-community-node-package",
+		"invoice",
+		"invoicing",
+		"pdf",
+		"billing",
+		"ashdocs"
+	],
+	"author": {
+		"name": "ASH Studios",
+		"email": "ashwinmanikandan@ashdocs.com"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/ashwin191855/n8n-nodes-ashdocs.git"
+	},
+	"scripts": {
+		"build": "n8n-node build",
+		"build:watch": "tsc --watch",
+		"dev": "n8n-node dev",
+		"lint": "n8n-node lint",
+		"lint:fix": "n8n-node lint --fix",
+		"test": "node --test test/shared.test.js",
+		"release": "n8n-node release",
+		"prepublishOnly": "n8n-node prerelease"
+	},
+	"files": [
+		"dist/**/*.js",
+		"dist/**/*.node.json",
+		"dist/**/*.svg"
+	],
+	"n8n": {
+		"n8nNodesApiVersion": 1,
+		"strict": true,
+		"credentials": [
+			"dist/credentials/AshdocsApi.credentials.js"
+		],
+		"nodes": [
+			"dist/nodes/Ashdocs/Ashdocs.node.js",
+			"dist/nodes/AshdocsTrigger/AshdocsTrigger.node.js"
+		]
+	},
+	"devDependencies": {
+		"@n8n/node-cli": "0.51.3",
+		"eslint": "9.32.0",
+		"prettier": "3.6.2",
+		"release-it": "^21.1.0",
+		"typescript": "5.9.2"
+	},
+	"peerDependencies": {
+		"n8n-workflow": "*"
+	}
+}
