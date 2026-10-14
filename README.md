@@ -5,7 +5,7 @@ invoices, manage customers, generate and redact PDFs, and start workflows when a
 viewed, paid or becomes overdue.
 
 [Installation](#installation) · [Credentials](#credentials) · [Operations](#operations) ·
-[Trigger](#trigger) · [Example workflow](#example-workflow) · [ASHDOCS docs](https://www.ashdocs.com/docs)
+[Trigger](#trigger) · [Example workflows](#example-workflows) · [ASHDOCS docs](https://www.ashdocs.com/docs)
 
 ## Installation
 
@@ -58,16 +58,31 @@ workflow is deactivated. It checks the `X-ASHDOCS-Signature` header of each deli
 invoice plus `event`, `event_id`, `occurred_at` and `delivered_at`. Webhooks are available on ASHDOCS
 plans that include them.
 
-## Example workflow
+## Example workflows
 
-[`examples/sheets-to-invoice.json`](examples/sheets-to-invoice.json): **Google Sheets Trigger** (row
-added) → **ASHDOCS: Invoice → Create** → **ASHDOCS: Invoice → Send**.
+Eight ready-to-import workflows in [`examples/`](examples/). Each opens with pinned sample data (the
+fictional customer Northwind Studio), so **Test workflow** shows what it does before you connect
+anything, and each has Overview, Setup and Customize sticky notes on the canvas.
 
-1. Download the file, then in n8n open a new workflow and paste its contents (or use **⋯ → Import from File**).
-2. Open each node and select your own Google Sheets and ASHDOCS credentials. The file contains none.
-3. In the Google Sheets Trigger, pick your spreadsheet and sheet. The example expects the columns
-   `Client`, `Email`, `Description`, `Quantity` and `Unit Price`.
-4. Run it first with a test API key.
+| File | What it does | Also uses | ASHDOCS plan |
+|---|---|---|---|
+| [`sheets-to-invoice.json`](examples/sheets-to-invoice.json) | Create and email invoices from new Google Sheets rows | Google Sheets | Free |
+| [`overdue-reminders.json`](examples/overdue-reminders.json) | Send escalating overdue invoice reminders (Gmail, Slack, a Google Sheets log) | Gmail, Google Sheets, Slack | Free (optional instant branch: Starter+) |
+| [`paid-to-sheets.json`](examples/paid-to-sheets.json) | Mark Google Sheets rows paid and notify Slack when an invoice is paid | Google Sheets, Slack | Starter+ |
+| [`airtable-to-invoice.json`](examples/airtable-to-invoice.json) | Create, send and track invoices from Airtable records | Airtable | Free (Paid part: Starter+) |
+| [`hubspot-deal-won-deposit.json`](examples/hubspot-deal-won-deposit.json) | Create a deposit invoice when a HubSpot deal is won | HubSpot | Free |
+| [`retainer-from-hours.json`](examples/retainer-from-hours.json) | Generate monthly retainer invoices from Toggl Track time entries | Toggl Track, Google Sheets | Free |
+| [`stripe-receipt-pdf.json`](examples/stripe-receipt-pdf.json) | Email a branded PDF receipt after a Stripe payment (Generate PDF) | Stripe, Gmail | Free |
+| [`viewed-not-paid.json`](examples/viewed-not-paid.json) | Follow up personally when an invoice is viewed but unpaid after 3 days | Gmail | Starter+ |
+
+Free plan: creating and sending invoices (100 credits a month). Starter and up: the invoice webhooks
+the ASHDOCS Trigger uses (sent, viewed, paid, overdue).
+
+1. Download a file, then in n8n open a new workflow and use **⋯ → Import from File** (or paste the JSON).
+2. Open each node with a warning and select your own credentials. The files reference credentials by
+   name only (**ASHDOCS API**, **Google Sheets account**, **Gmail account**, …) and contain no keys.
+3. Follow the blue **Setup** note on the canvas; run it first with a test API key.
+
 
 ## Compatibility
 

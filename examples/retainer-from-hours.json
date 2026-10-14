@@ -1,0 +1,734 @@
+{
+  "name": "Generate monthly retainer invoices from Toggl Track time entries with ASHDOCS",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "months",
+              "monthsInterval": 1,
+              "triggerAtDayOfMonth": 1,
+              "triggerAtHour": 8,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "31d1ec45-ed56-49c9-a513-2dda3e5b80ec",
+      "name": "1st of every month",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "564e7c87-1e83-434d-aa1d-1a3a163bacdc",
+              "name": "currency",
+              "value": "USD",
+              "type": "string"
+            },
+            {
+              "id": "3b45edc4-734c-488e-a4a5-5968b0b013df",
+              "name": "dueTerms",
+              "value": "net_15",
+              "type": "string"
+            },
+            {
+              "id": "d28a0f74-4a84-4f03-a255-e6a0e3682b18",
+              "name": "billableOnly",
+              "value": true,
+              "type": "boolean"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "78109370-ff3b-49f3-a82c-c5c8ea8f7618",
+      "name": "Settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://api.track.toggl.com/api/v9/me/time_entries",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "start_date",
+              "value": "={{ $today.minus({ months: 1 }).startOf('month').toFormat('yyyy-MM-dd') }}"
+            },
+            {
+              "name": "end_date",
+              "value": "={{ $today.startOf('month').toFormat('yyyy-MM-dd') }}"
+            },
+            {
+              "name": "meta",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "96f05177-28ab-4991-a709-1caefd182152",
+      "name": "Get last month's time entries",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        480,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "httpBasicAuth": {
+          "name": "Toggl Track API token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "options": {}
+      },
+      "id": "3a181d52-c938-46ae-a370-478cf254d2bb",
+      "name": "Read rates",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        720,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "executeOnce": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// One invoice per client from last month's Toggl Track hours, priced from the Rates sheet.\nconst from = $today.minus({ months: 1 }).startOf('month');\nconst to = $today.startOf('month');\nconst month = from.toFormat('LLLL yyyy');\nconst settings = $('Settings').first().json;\nconst same = (a, b) => String(a ?? '').trim().toLowerCase() === String(b ?? '').trim().toLowerCase();\n\n// Toggl returns a list of time entries (n8n gives one item per entry).\nconst entries = $('Get last month\\'s time entries').all()\n  .flatMap((i) => (Array.isArray(i.json.items) ? i.json.items : [i.json]))\n  .filter((e) => e && e.duration > 0 && e.start)\n  .filter((e) => { const d = DateTime.fromISO(e.start); return d >= from && d < to; })\n  .filter((e) => !settings.billableOnly || e.billable);\n\nconst rates = $('Read rates').all().map((i) => i.json);\nconst rateRow = (client, project) =>\n  rates.find((r) => same(r.Client, client) && same(r.Project, project)) ||\n  rates.find((r) => same(r.Client, client) && !String(r.Project ?? '').trim());\n\nconst clients = {};\nfor (const e of entries) {\n  const client = e.client_name || 'No client';\n  const project = e.project_name || 'No project';\n  const c = (clients[client] ??= {});\n  c[project] = (c[project] ?? 0) + e.duration;\n}\n\nreturn Object.entries(clients).map(([client, projects]) => {\n  const lines = [];\n  const unpriced = [];\n  let email = '';\n  for (const [project, seconds] of Object.entries(projects)) {\n    const r = rateRow(client, project);\n    const hours = Math.round((seconds / 3600) * 100) / 100;\n    if (!r || r['Hourly Rate'] === '' || r['Hourly Rate'] === undefined) { unpriced.push(project); continue; }\n    email = email || r['Billing Email'] || '';\n    lines.push({ description: `${project}, ${month}`, quantity: hours.toFixed(2), unit: 'hours', unit_price: String(r['Hourly Rate']) });\n  }\n  const reason = client === 'No client' ? 'time without a client'\n    : !lines.length ? 'no rate in the Rates sheet'\n    : !email ? 'no Billing Email in the Rates sheet' : '';\n  const hours = (Object.values(projects).reduce((s, sec) => s + sec, 0) / 3600).toFixed(2);\n  return { json: { client, email, month, hours, line_items: lines, unpriced_projects: unpriced, reason } };\n});"
+      },
+      "id": "046183cd-80ac-4fb6-a22e-8b9a9d0d2bc0",
+      "name": "Build one invoice per client",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "9a5753fa-b20a-4991-a730-398153dae5d2",
+              "leftValue": "={{ $json.reason }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "empty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "f69a6c28-1287-43f9-a18a-7ca598158519",
+      "name": "Ready to invoice?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "customer",
+        "operation": "create",
+        "name": "={{ $('Build one invoice per client').item.json.client }}",
+        "email": "={{ $('Build one invoice per client').item.json.email }}",
+        "additionalFields": {},
+        "onDuplicate": "existing"
+      },
+      "id": "17ef2384-ae37-40ef-a7fe-6ef91a438621",
+      "name": "Find or create customer",
+      "type": "n8n-nodes-ashdocs.ashdocs",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        -60
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "ashdocsApi": {
+          "name": "ASHDOCS API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "invoice",
+        "operation": "create",
+        "customerType": "id",
+        "customerId": "={{ $json.id }}",
+        "lineItemsInput": "json",
+        "lineItemsJson": "={{ $('Build one invoice per client').item.json.line_items }}",
+        "issue": true,
+        "send": false,
+        "additionalFields": {
+          "currency": "={{ $('Settings').first().json.currency }}",
+          "dueTerms": "={{ $('Settings').first().json.dueTerms }}",
+          "idempotencyKey": "=toggl-{{ $('Build one invoice per client').item.json.month }}-{{ $('Build one invoice per client').item.json.client }}",
+          "reference": "=Retainer {{ $('Build one invoice per client').item.json.month }}"
+        }
+      },
+      "id": "f4b45548-5687-4e94-a8a2-3ac8be37a86f",
+      "name": "Create invoice",
+      "type": "n8n-nodes-ashdocs.ashdocs",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        -60
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "ashdocsApi": {
+          "name": "ASHDOCS API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "71ee1bf3-d468-4e32-a882-6e1b6f7ab74a",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "d3b88a30-86c1-47c8-a25e-08e7f8f94ef6",
+      "name": "Invoice created?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1920,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "invoice",
+        "operation": "send",
+        "invoiceId": "={{ $('Create invoice').item.json.id }}",
+        "sendOptions": {}
+      },
+      "id": "d08ffb89-33ff-45f5-a5ae-69138d606d64",
+      "name": "Send invoice",
+      "type": "n8n-nodes-ashdocs.ashdocs",
+      "typeVersion": 1,
+      "position": [
+        2160,
+        -60
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "ashdocsApi": {
+          "name": "ASHDOCS API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "71ee1bf3-d468-4e32-a882-6e1b6f7ab74a",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "72851bc5-58b4-4f8d-ad71-7f4284d2265a",
+      "name": "Invoice sent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2400,
+        -60
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Month": "={{ $('Build one invoice per client').item.json.month }}",
+            "Client": "={{ $('Build one invoice per client').item.json.client }}",
+            "Status": "sent",
+            "Invoice Number": "={{ $('Create invoice').item.json.number }}",
+            "Hours": "={{ $('Build one invoice per client').item.json.hours }}",
+            "Total": "={{ $('Create invoice').item.json.totals.total_formatted }}",
+            "Pay Link": "={{ $('Create invoice').item.json.pay_link_url || $('Create invoice').item.json.hosted_url }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Month",
+              "displayName": "Month",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Client",
+              "displayName": "Client",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Invoice Number",
+              "displayName": "Invoice Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Hours",
+              "displayName": "Hours",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Total",
+              "displayName": "Total",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Pay Link",
+              "displayName": "Pay Link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "6ebac3c3-fb84-4879-af97-e2b022bd698f",
+      "name": "Log invoice",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2640,
+        -160
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Month": "={{ $('Build one invoice per client').item.json.month }}",
+            "Client": "={{ $('Build one invoice per client').item.json.client }}",
+            "Status": "={{ $('Build one invoice per client').item.json.reason ? 'skipped: ' + $('Build one invoice per client').item.json.reason : 'failed: ' + (() => { const e = $json.error; if (typeof e === 'string') return e + ($json.error_description ? ' ' + $json.error_description : ''); const raw = String(e?.message ?? ''); try { const d = JSON.parse(JSON.parse(raw.slice(raw.indexOf('\"')))).detail; return typeof d === 'string' ? d : [d.message].concat((d.errors || []).map(x => x.field + ': ' + x.message)).join(' '); } catch (err) { return raw || 'see the n8n execution'; } })() }}",
+            "Hours": "={{ $('Build one invoice per client').item.json.hours }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Month",
+              "displayName": "Month",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Client",
+              "displayName": "Client",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Hours",
+              "displayName": "Hours",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "9aee9ecf-e49d-468d-a1f8-98b4c37e1072",
+      "name": "Log problem",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2640,
+        160
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "**Self-hosted n8n only:** this version uses the community node `n8n-nodes-ashdocs` (n8n verification pending), so it runs on self-hosted n8n. The HTTP version of the same template uses only built-in nodes and also runs on n8n Cloud.\n\n\n## Generate monthly retainer invoices from Toggl Track time entries with ASHDOCS\n\nFreelancers and small agencies who track time in Toggl Track and bill clients monthly by the hour.\n\n### How it works\n1. On the 1st of each month at 08:00, **Get last month’s time entries** reads your Toggl Track time entries for the previous month (Toggl Track API v9, with client and project names).\n2. **Read rates** loads the **Rates** tab: one row per client and project with an hourly rate and the client’s billing email.\n3. **Build one invoice per client** adds up hours per client and project and turns them into line items (hours × rate).\n4. For each client, ASHDOCS finds or creates the customer, creates the invoice, and emails it.\n5. Every client ends up as a row in the **Invoice log** tab: sent with the invoice number, or skipped or failed with the reason (no rate, no email, API error).\n\n### Requirements\n- An ASHDOCS account (https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=retainer-from-hours). Works on every ASHDOCS plan, including Free (100 credits a month).\n- A Toggl Track account\n- A Google Sheets account\n- Self-hosted n8n with the community node `n8n-nodes-ashdocs` installed\n\n[ASHDOCS](https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=retainer-from-hours) · [Docs](https://www.ashdocs.com/docs)",
+        "height": 740,
+        "width": 540,
+        "color": 1
+      },
+      "id": "e24291b2-70be-45dd-a6b7-b5e490b0ccae",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1160,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Setup\n**Plan:** Works on every ASHDOCS plan, including Free (100 credits a month).\n\n1. Create an ASHDOCS account at https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=retainer-from-hours and create an API key on the **API Keys** page of the dashboard. A test key makes watermarked test invoices while you try the workflow.\n2. Install the ASHDOCS community node: **Settings → Community nodes → Install**, enter `n8n-nodes-ashdocs`. Then open any ASHDOCS node and create the **ASHDOCS API** credential with your key.\n3. Toggl Track: copy your API token from **Profile settings** and create a **Basic Auth** credential named **Toggl Track API token**: User = the token, Password = `api_token`.\n4. Create a Google Sheet with two tabs. **Rates**: Client, Project, Hourly Rate, Billing Email (leave Project empty for a client-wide rate). **Invoice log**: Month, Client, Status, Invoice Number, Hours, Total, Pay Link. Pick them in **Read rates**, **Log invoice** and **Log problem**.\n5. Fill in **Settings**: currency, payment terms, and whether to bill only billable time.\n6. Run **Test workflow** once. Clients without a rate or email are logged as skipped, not invoiced.",
+        "height": 500,
+        "width": 480,
+        "color": 5
+      },
+      "id": "7c7085fa-bdb9-4edd-a2a7-b5d5644c7ef8",
+      "name": "Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -580,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Customize\n- This reads the time entries of the Toggl user whose token you use. For a team, call Toggl’s Reports API for the workspace in **Get last month’s time entries** instead.\n- Round hours differently, or add a minimum monthly fee, in **Build one invoice per client**.\n- Create drafts for review instead of sending: remove **Send invoice** and set Issue off in **Create invoice**.",
+        "height": 260,
+        "width": 480,
+        "color": 4
+      },
+      "id": "d7bf14ae-6022-48ec-acfe-c367d959594f",
+      "name": "Customize",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -580,
+        220
+      ]
+    }
+  ],
+  "pinData": {
+    "1st of every month": [
+      {
+        "json": {
+          "timestamp": "2026-11-01T08:00:00.000+00:00",
+          "Readable date": "November 1st 2026, 8:00:00 am",
+          "Day of week": "Sunday",
+          "Timezone": "UTC (UTC+00:00)"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "1st of every month": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Get last month's time entries",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get last month's time entries": {
+      "main": [
+        [
+          {
+            "node": "Read rates",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read rates": {
+      "main": [
+        [
+          {
+            "node": "Build one invoice per client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build one invoice per client": {
+      "main": [
+        [
+          {
+            "node": "Ready to invoice?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ready to invoice?": {
+      "main": [
+        [
+          {
+            "node": "Find or create customer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log problem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find or create customer": {
+      "main": [
+        [
+          {
+            "node": "Create invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create invoice": {
+      "main": [
+        [
+          {
+            "node": "Invoice created?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice created?": {
+      "main": [
+        [
+          {
+            "node": "Send invoice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log problem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send invoice": {
+      "main": [
+        [
+          {
+            "node": "Invoice sent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice sent?": {
+      "main": [
+        [
+          {
+            "node": "Log invoice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Log problem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

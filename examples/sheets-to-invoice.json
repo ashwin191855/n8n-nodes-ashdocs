@@ -1,5 +1,5 @@
 {
-  "name": "Google Sheets row → ASHDOCS invoice → send",
+  "name": "Create and email invoices from new Google Sheets rows with ASHDOCS",
   "nodes": [
     {
       "parameters": {
@@ -12,83 +12,540 @@
         },
         "documentId": {
           "__rl": true,
-          "mode": "list",
-          "value": ""
+          "value": "",
+          "mode": "list"
         },
         "sheetName": {
           "__rl": true,
-          "mode": "list",
-          "value": ""
+          "value": "",
+          "mode": "list"
         },
-        "event": "rowAdded",
+        "event": "anyUpdate",
         "options": {}
       },
-      "id": "0c7d1a52-2f0e-4b8e-9a51-6b1f3e2d4a10",
-      "name": "New Sheet Row",
+      "id": "c45b1350-ea48-4291-a3df-9c49c9e4890e",
+      "name": "New or updated row",
       "type": "n8n-nodes-base.googleSheetsTrigger",
       "typeVersion": 1,
-      "position": [0, 0]
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "googleSheetsTriggerOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "95ca92fa-a83e-41c6-af7a-51d068647f27",
+              "leftValue": "={{ ['', 'ready'].includes(String($json.Status ?? '').trim().toLowerCase()) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "3b79ad5f-e789-4267-af06-d7a9ebc06a97",
+              "leftValue": "={{ $json.Email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "e781927b-991b-4684-affe-de3c3d1e1f52",
+              "leftValue": "={{ $json['Unit Price'] }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "95c03dc1-3cd6-41a2-aa8e-1006b42bdc36",
+      "name": "Ready rows only",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "customer",
+        "operation": "create",
+        "name": "={{ $('Ready rows only').item.json.Client || $('Ready rows only').item.json.Email }}",
+        "email": "={{ $('Ready rows only').item.json.Email }}",
+        "additionalFields": {},
+        "onDuplicate": "existing"
+      },
+      "id": "b0493b11-5914-4518-a1ca-de226afd4d83",
+      "name": "Find or create customer",
+      "type": "n8n-nodes-ashdocs.ashdocs",
+      "typeVersion": 1,
+      "position": [
+        480,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "ashdocsApi": {
+          "name": "ASHDOCS API"
+        }
+      }
     },
     {
       "parameters": {
         "resource": "invoice",
         "operation": "create",
-        "customerType": "details",
-        "customerName": "={{ $json.Client }}",
-        "customerEmail": "={{ $json.Email }}",
-        "lineItemsInput": "fields",
+        "customerType": "id",
+        "customerId": "={{ $json.id }}",
         "lineItems": {
           "item": [
             {
-              "description": "={{ $json.Description }}",
-              "quantity": "={{ $json.Quantity }}",
-              "unitPrice": "={{ $json['Unit Price'] }}"
+              "description": "={{ $('Ready rows only').item.json.Description }}",
+              "quantity": "={{ $('Ready rows only').item.json.Quantity || 1 }}",
+              "unitPrice": "={{ $('Ready rows only').item.json['Unit Price'] }}"
             }
           ]
         },
         "issue": true,
         "send": false,
         "additionalFields": {
-          "idempotencyKey": "=sheet-row-{{ $json.row_number }}"
+          "dueDate": "={{ $today.plus({ days: Number($('Ready rows only').item.json['Due Days']) || 30 }).toFormat('yyyy-MM-dd') }}",
+          "idempotencyKey": "=sheet-row-{{ $('Ready rows only').item.json.row_number }}-{{ $('Ready rows only').item.json.Email }}"
         }
       },
-      "id": "5b2e9c84-7d3a-4f61-8e0b-2c9a7f1d3e21",
-      "name": "Create Invoice",
+      "id": "0c64839e-8ace-4148-a745-17fec50797cc",
+      "name": "Create invoice",
       "type": "n8n-nodes-ashdocs.ashdocs",
       "typeVersion": 1,
-      "position": [260, 0]
+      "position": [
+        720,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "ashdocsApi": {
+          "name": "ASHDOCS API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "71ee1bf3-d468-4e32-a882-6e1b6f7ab74a",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "c85b752e-92a8-4d9c-aad3-73c664a67a4a",
+      "name": "Invoice created?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        0
+      ]
     },
     {
       "parameters": {
         "resource": "invoice",
         "operation": "send",
-        "invoiceId": "={{ $json.id }}",
+        "invoiceId": "={{ $('Create invoice').item.json.id }}",
         "sendOptions": {}
       },
-      "id": "9a4f7e13-1c6b-4d2a-b5e8-3f0d6a9c2b32",
-      "name": "Send Invoice",
+      "id": "c017a52e-8747-482f-a680-dd74935be2d2",
+      "name": "Send invoice",
       "type": "n8n-nodes-ashdocs.ashdocs",
       "typeVersion": 1,
-      "position": [520, 0]
+      "position": [
+        1200,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "ashdocsApi": {
+          "name": "ASHDOCS API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "71ee1bf3-d468-4e32-a882-6e1b6f7ab74a",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "a0470d4d-1fe7-405d-a20b-51389ad7488a",
+      "name": "Invoice sent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('Ready rows only').item.json.row_number }}",
+            "Status": "sent",
+            "Invoice Number": "={{ $('Create invoice').item.json.number }}",
+            "Pay Link": "={{ $('Create invoice').item.json.pay_link_url || $('Create invoice').item.json.hosted_url }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Invoice Number",
+              "displayName": "Invoice Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Pay Link",
+              "displayName": "Pay Link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "47ec6c07-57a8-4362-ab9c-fea338588214",
+      "name": "Mark row sent",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1680,
+        -100
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $('Ready rows only').item.json.row_number }}",
+            "Status": "={{ 'error: ' + (() => { const e = $json.error; if (typeof e === 'string') return e + ($json.error_description ? ' ' + $json.error_description : ''); const raw = String(e?.message ?? ''); try { const d = JSON.parse(JSON.parse(raw.slice(raw.indexOf('\"')))).detail; return typeof d === 'string' ? d : [d.message].concat((d.errors || []).map(x => x.field + ': ' + x.message)).join(' '); } catch (err) { return raw || 'see the n8n execution'; } })() }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "a7a7b57d-d53b-4f64-abdb-d88011d15412",
+      "name": "Mark row failed",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1680,
+        140
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "**Self-hosted n8n only:** this version uses the community node `n8n-nodes-ashdocs` (n8n verification pending), so it runs on self-hosted n8n. The HTTP version of the same template uses only built-in nodes and also runs on n8n Cloud.\n\n\n## Create and email invoices from new Google Sheets rows with ASHDOCS\n\nFreelancers, studios and small teams who already track billable work in a Google Sheet and want each finished row to become a real, numbered invoice without copying anything by hand.\n\n### How it works\n1. The **Google Sheets Trigger** checks the sheet every minute for new or changed rows.\n2. **Ready rows only** lets a row through when its Status is empty or `ready` and it has an email and a unit price. Rows already marked `sent` are skipped, so the workflow never invoices a row twice.\n3. ASHDOCS finds the customer by email, or creates them.\n4. **Create invoice** numbers the invoice and renders its PDF and payment page. An idempotency key built from the row means a retry returns the same invoice instead of a second one.\n5. **Send invoice** emails it to the client from ASHDOCS.\n6. The row is updated: Status `sent`, Invoice Number, Pay Link. If anything fails, Status becomes `error: …` with the reason, and the row waits for you to fix it and set Status back to `ready`.\n\n### Requirements\n- An ASHDOCS account (https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=sheets-to-invoice). Works on every ASHDOCS plan, including Free (100 credits a month).\n- A Google Sheets account\n- Self-hosted n8n with the community node `n8n-nodes-ashdocs` installed\n\n[ASHDOCS](https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=sheets-to-invoice) · [Docs](https://www.ashdocs.com/docs)",
+        "height": 720,
+        "width": 540,
+        "color": 1
+      },
+      "id": "4b435d0e-c001-4d83-afe0-4daa944693bf",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1160,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Setup\n**Plan:** Works on every ASHDOCS plan, including Free (100 credits a month).\n\n1. Create an ASHDOCS account at https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=sheets-to-invoice and create an API key on the **API Keys** page of the dashboard. A test key makes watermarked test invoices while you try the workflow.\n2. Install the ASHDOCS community node: **Settings → Community nodes → Install**, enter `n8n-nodes-ashdocs`. Then open any ASHDOCS node and create the **ASHDOCS API** credential with your key.\n3. Create a sheet with these columns in row 1: **Client, Email, Description, Quantity, Unit Price, Due Days, Status, Invoice Number, Pay Link**.\n4. In **New or updated row**, **Mark row sent** and **Mark row failed**, connect your Google account and pick the same spreadsheet and sheet.\n5. Add a test row with your own email address, set Status to `ready`, and run the workflow once with **Test workflow**. Then activate it.",
+        "height": 440,
+        "width": 480,
+        "color": 5
+      },
+      "id": "e23e5a10-7741-41b1-a443-d5db433f6bfb",
+      "name": "Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -580,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Customize\n- Set the guard in **Ready rows only** to accept only `ready`, so half-typed rows are never invoiced.\n- Add more line-item columns (for example Tax Rate or Unit) and map them in **Create invoice**.\n- Pick a currency or invoice design in **Create invoice → Additional Fields** (node form) or the JSON body (HTTP form).\n- Change the email subject and message in **Send invoice**.",
+        "height": 260,
+        "width": 480,
+        "color": 4
+      },
+      "id": "4402a70a-7261-4fdd-a74b-7d26a6e2e795",
+      "name": "Customize",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -580,
+        180
+      ]
     }
   ],
+  "pinData": {
+    "New or updated row": [
+      {
+        "json": {
+          "row_number": 2,
+          "Client": "Northwind Studio",
+          "Email": "billing@northwind.example",
+          "Description": "Brand identity design",
+          "Quantity": 1,
+          "Unit Price": 1200,
+          "Due Days": 14,
+          "Status": "ready",
+          "Invoice Number": "",
+          "Pay Link": ""
+        }
+      }
+    ]
+  },
   "connections": {
-    "New Sheet Row": {
+    "New or updated row": {
       "main": [
         [
           {
-            "node": "Create Invoice",
+            "node": "Ready rows only",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "Create Invoice": {
+    "Ready rows only": {
       "main": [
         [
           {
-            "node": "Send Invoice",
+            "node": "Find or create customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find or create customer": {
+      "main": [
+        [
+          {
+            "node": "Create invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create invoice": {
+      "main": [
+        [
+          {
+            "node": "Invoice created?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice created?": {
+      "main": [
+        [
+          {
+            "node": "Send invoice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark row failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send invoice": {
+      "main": [
+        [
+          {
+            "node": "Invoice sent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice sent?": {
+      "main": [
+        [
+          {
+            "node": "Mark row sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark row failed",
             "type": "main",
             "index": 0
           }
@@ -96,8 +553,12 @@
       ]
     }
   },
+  "active": false,
   "settings": {
     "executionOrder": "v1"
   },
-  "pinData": {}
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
 }

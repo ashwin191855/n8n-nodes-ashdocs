@@ -1,0 +1,878 @@
+{
+  "name": "Create, send and track invoices from Airtable records with ASHDOCS",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Part B: mark paid (paid plan)\nWhen ASHDOCS reports the invoice paid, the record is marked Paid.",
+        "height": 560,
+        "width": 940,
+        "color": 7
+      },
+      "id": "7278a3cc-d4ed-46cc-a223-3920d31979a9",
+      "name": "Part B label",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Part A: create and send\nRecords in the **Ready to invoice** view become sent invoices.",
+        "height": 560,
+        "width": 1900,
+        "color": 7
+      },
+      "id": "ad38bcce-6114-4945-ab75-6231e1c276c1",
+      "name": "Part A label",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        -240
+      ]
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "authentication": "airtableTokenApi",
+        "baseId": {
+          "__rl": true,
+          "value": "",
+          "mode": "url"
+        },
+        "tableId": {
+          "__rl": true,
+          "value": "",
+          "mode": "url"
+        },
+        "triggerField": "Last Modified",
+        "additionalFields": {
+          "viewId": "Ready to invoice"
+        }
+      },
+      "id": "8442d8cb-480e-4544-a94f-37e4972710fa",
+      "name": "Record ready to invoice",
+      "type": "n8n-nodes-base.airtableTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4cfabb22-d398-475f-a8c6-7e426df378b0",
+              "leftValue": "={{ ['', 'ready'].includes(String($json.fields.Status ?? '').trim().toLowerCase()) }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "30e3a938-741f-400d-aed9-c4db30f826a8",
+              "leftValue": "={{ $json.fields.Email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "485cdaa0-c077-4c3a-a208-f23f79e459c2",
+      "name": "Not invoiced yet",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "customer",
+        "operation": "create",
+        "name": "={{ $('Not invoiced yet').item.json.fields.Client || $('Not invoiced yet').item.json.fields.Email }}",
+        "email": "={{ $('Not invoiced yet').item.json.fields.Email }}",
+        "additionalFields": {},
+        "onDuplicate": "existing"
+      },
+      "id": "abef6e39-fb7f-4d28-a616-da070a9a940a",
+      "name": "Find or create customer",
+      "type": "n8n-nodes-ashdocs.ashdocs",
+      "typeVersion": 1,
+      "position": [
+        480,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "ashdocsApi": {
+          "name": "ASHDOCS API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "invoice",
+        "operation": "create",
+        "customerType": "id",
+        "customerId": "={{ $json.id }}",
+        "lineItems": {
+          "item": [
+            {
+              "description": "={{ $('Not invoiced yet').item.json.fields.Description }}",
+              "quantity": "={{ $('Not invoiced yet').item.json.fields.Quantity || 1 }}",
+              "unitPrice": "={{ $('Not invoiced yet').item.json.fields['Unit Price'] }}"
+            }
+          ]
+        },
+        "issue": true,
+        "send": false,
+        "additionalFields": {
+          "dueDate": "={{ $today.plus({ days: Number($('Not invoiced yet').item.json.fields['Due Days']) || 30 }).toFormat('yyyy-MM-dd') }}",
+          "idempotencyKey": "=airtable-{{ $('Not invoiced yet').item.json.id }}"
+        }
+      },
+      "id": "10c43231-6089-48c7-a5a8-3c3b32665eb1",
+      "name": "Create invoice",
+      "type": "n8n-nodes-ashdocs.ashdocs",
+      "typeVersion": 1,
+      "position": [
+        720,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "ashdocsApi": {
+          "name": "ASHDOCS API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "71ee1bf3-d468-4e32-a882-6e1b6f7ab74a",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "5a75b38c-4fe0-4569-a3d9-bc06a8bb7eb9",
+      "name": "Invoice created?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "invoice",
+        "operation": "send",
+        "invoiceId": "={{ $('Create invoice').item.json.id }}",
+        "sendOptions": {}
+      },
+      "id": "9b7912fb-7e05-44f9-a5f7-709c8cc25294",
+      "name": "Send invoice",
+      "type": "n8n-nodes-ashdocs.ashdocs",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "ashdocsApi": {
+          "name": "ASHDOCS API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "71ee1bf3-d468-4e32-a882-6e1b6f7ab74a",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "792c6661-4c04-43a5-a238-9a39c0b31a62",
+      "name": "Invoice sent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Not invoiced yet').item.json.id }}",
+            "Status": "Sent",
+            "Invoice Number": "={{ $('Create invoice').item.json.number }}",
+            "Pay Link": "={{ $('Create invoice').item.json.pay_link_url || $('Create invoice').item.json.hosted_url }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Invoice Number",
+              "displayName": "Invoice Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Pay Link",
+              "displayName": "Pay Link",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "d7715e4d-96af-42d3-af38-10a89515daf9",
+      "name": "Mark record sent",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1680,
+        -100
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $('Not invoiced yet').item.json.id }}",
+            "Status": "Error"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "cfe73cea-7090-4440-a804-490ea1d1b140",
+      "name": "Mark record failed",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        1680,
+        140
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "events": [
+          "invoice.paid"
+        ],
+        "options": {}
+      },
+      "id": "71e67da7-1b43-48b8-a726-5eacf5dc70ef",
+      "name": "Invoice paid",
+      "type": "n8n-nodes-ashdocs.ashdocsTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        600
+      ],
+      "webhookId": "6a2fc57b-bbc7-4ecf-ace8-7841a058cc74",
+      "credentials": {
+        "ashdocsApi": {
+          "name": "ASHDOCS API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "search",
+        "base": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "filterByFormula": "={Invoice Number} = '{{ $('Invoice paid').item.json.number }}'",
+        "returnAll": false,
+        "limit": 1,
+        "options": {}
+      },
+      "id": "094a8d87-7c47-4359-a33d-337a4dbcbb2c",
+      "name": "Find record by invoice number",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        600
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true,
+      "credentials": {
+        "airtableTokenApi": {
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "71ee1bf3-d468-4e32-a882-6e1b6f7ab74a",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "eb95d0cf-97b2-47b7-a8e9-74260e7d64a2",
+      "name": "Record found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        600
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "base": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "table": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "id": "={{ $json.id }}",
+            "Status": "Paid",
+            "Paid Date": "={{ DateTime.fromISO($('Invoice paid').item.json.paid_at || $now.toISO()).toFormat('yyyy-MM-dd') }}"
+          },
+          "matchingColumns": [
+            "id"
+          ],
+          "schema": [
+            {
+              "id": "id",
+              "displayName": "id",
+              "required": false,
+              "defaultMatch": true,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Paid Date",
+              "displayName": "Paid Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {
+          "typecast": true
+        }
+      },
+      "id": "a224a38e-dd53-4da9-ad50-08c3133f09e3",
+      "name": "Mark record paid",
+      "type": "n8n-nodes-base.airtable",
+      "typeVersion": 2.1,
+      "position": [
+        720,
+        500
+      ],
+      "credentials": {
+        "airtableTokenApi": {
+          "name": "Airtable account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "4b526228-e661-427c-aaa0-7b69f8612f78",
+      "name": "No matching record",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        720,
+        740
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Self-hosted n8n only:** this version uses the community node `n8n-nodes-ashdocs` (n8n verification pending), so it runs on self-hosted n8n. The HTTP version of the same template uses only built-in nodes and also runs on n8n Cloud.\n\n\n## Create, send and track invoices from Airtable records with ASHDOCS\n\nAgencies and freelancers who run projects or orders in Airtable and want invoicing to happen from the same base, with the payment status coming back to it.\n\n### How it works\n1. **Part A.** The **Airtable Trigger** watches the view **Ready to invoice**. Each new or changed record with Status empty or `Ready` gets a customer (found by email or created), a numbered invoice and an email from ASHDOCS. The record gets Status `Sent`, Invoice Number and Pay Link, or Status `Error` if a step failed.\n2. **Part B.** When ASHDOCS reports the invoice paid, the record with that Invoice Number gets Status `Paid` and a Paid Date.\n3. Both parts live in one workflow, one canvas, with two triggers.\n\n### Requirements\n- An ASHDOCS account (https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=airtable-to-invoice). Part A (create and send) works on every ASHDOCS plan, including Free (100 credits a month). Part B (mark Paid) uses the invoice.paid webhook and needs a paid plan (Starter and up).\n- A Airtable account\n- Self-hosted n8n with the community node `n8n-nodes-ashdocs` installed\n\n[ASHDOCS](https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=airtable-to-invoice) · [Docs](https://www.ashdocs.com/docs)",
+        "height": 640,
+        "width": 540,
+        "color": 1
+      },
+      "id": "e7aa0a81-72db-4a9c-ac94-df28f5960f07",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1160,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Setup\n**Plan:** Part A (create and send) works on every ASHDOCS plan, including Free (100 credits a month). Part B (mark Paid) uses the invoice.paid webhook and needs a paid plan (Starter and up).\n\n1. Create an ASHDOCS account at https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=airtable-to-invoice and create an API key on the **API Keys** page of the dashboard. A test key makes watermarked test invoices while you try the workflow.\n2. Install the ASHDOCS community node: **Settings → Community nodes → Install**, enter `n8n-nodes-ashdocs`. Then open any ASHDOCS node and create the **ASHDOCS API** credential with your key.\n3. In Airtable, add these fields to your table: **Client, Email, Description, Quantity, Unit Price, Due Days** (number), **Status** (single select: Ready, Sent, Paid, Error), **Invoice Number, Pay Link, Paid Date** (date) and **Last Modified** (last modified time). Create a view **Ready to invoice** filtered to Status is Ready.\n4. Create an Airtable personal access token (scopes data.records:read, data.records:write, schema.bases:read) and connect it in every Airtable node, then pick your base and table in each.\n5. Activate the workflow. The **ASHDOCS Trigger** registers its own signed webhook for `invoice.paid` in your ASHDOCS account, and removes it when you deactivate the workflow. (Part B only.)\n6. Set one record to Ready with your own email and run **Test workflow** on Part A.",
+        "height": 560,
+        "width": 480,
+        "color": 5
+      },
+      "id": "d24777f9-5f1e-4761-aade-53757027fb07",
+      "name": "Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -580,
+        -400
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Customize\n- Use a currency field and map it in **Create invoice**.\n- Link records to a Clients table and look the email up there instead of a plain Email field.\n- Write the PDF link (`pdf_url`) into an attachment or URL field.",
+        "height": 200,
+        "width": 480,
+        "color": 4
+      },
+      "id": "89ac7015-f350-4fb2-a7fa-2e008155a119",
+      "name": "Customize",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -580,
+        200
+      ]
+    }
+  ],
+  "pinData": {
+    "Record ready to invoice": [
+      {
+        "json": {
+          "id": "recNw7Studio00001",
+          "createdTime": "2026-10-14T08:58:00.000Z",
+          "fields": {
+            "Client": "Northwind Studio",
+            "Email": "billing@northwind.example",
+            "Description": "Website redesign, phase 1",
+            "Quantity": 1,
+            "Unit Price": 2400,
+            "Due Days": 14,
+            "Status": "Ready",
+            "Last Modified": "2026-10-14T08:58:00.000Z"
+          }
+        }
+      }
+    ],
+    "Invoice paid": [
+      {
+        "json": {
+          "event": "invoice.paid",
+          "event_id": "evt_0b1c2d3e4f5a6b7c",
+          "occurred_at": "2026-10-20T15:04:12Z",
+          "delivered_at": "2026-10-20T15:04:12Z",
+          "id": "inv_5f3a9c1d2e7b4a60b8d1",
+          "kind": "invoice",
+          "status": "paid",
+          "number": "INV-0042",
+          "customer": {
+            "id": "cus_2b7e4c9a1f3d4e5f6a7b",
+            "name": "Northwind Studio",
+            "email": "billing@northwind.example",
+            "phone": null,
+            "address": null,
+            "tax_id": null,
+            "custom_fields": {}
+          },
+          "line_items": [
+            {
+              "description": "Brand identity design",
+              "quantity": "1",
+              "unit_price": "1200.00",
+              "tax_rate": null,
+              "unit": null
+            }
+          ],
+          "currency": "USD",
+          "issue_date": "2026-10-01",
+          "due_date": "2026-10-15",
+          "due_terms": "net_15",
+          "reference": null,
+          "reminders_enabled": true,
+          "testing": false,
+          "totals": {
+            "currency": "USD",
+            "subtotal_minor": 240000,
+            "subtotal_formatted": "$2,400.00",
+            "tax_minor": 0,
+            "tax_formatted": "$0.00",
+            "total_minor": 240000,
+            "total_formatted": "$2,400.00",
+            "deposit_minor": 0,
+            "deposit_formatted": "$0.00",
+            "paid_minor": 240000,
+            "paid_formatted": "$2,400.00",
+            "balance_minor": 0,
+            "balance_formatted": "$0.00"
+          },
+          "pay_link_url": "https://pay.example/northwind-inv-0042",
+          "hosted_url": "https://invoices.example/northwind-inv-0042",
+          "pdf_url": "https://files.example/northwind-inv-0042.pdf",
+          "issued_at": "2026-10-01T09:00:00Z",
+          "sent_at": "2026-10-01T09:00:05Z",
+          "first_viewed_at": null,
+          "paid_at": "2026-10-20T15:04:12Z",
+          "voided_at": null,
+          "created_at": "2026-10-01T09:00:00Z",
+          "updated_at": "2026-10-20T15:04:12Z"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Record ready to invoice": {
+      "main": [
+        [
+          {
+            "node": "Not invoiced yet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Not invoiced yet": {
+      "main": [
+        [
+          {
+            "node": "Find or create customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find or create customer": {
+      "main": [
+        [
+          {
+            "node": "Create invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create invoice": {
+      "main": [
+        [
+          {
+            "node": "Invoice created?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice created?": {
+      "main": [
+        [
+          {
+            "node": "Send invoice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark record failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send invoice": {
+      "main": [
+        [
+          {
+            "node": "Invoice sent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice sent?": {
+      "main": [
+        [
+          {
+            "node": "Mark record sent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark record failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice paid": {
+      "main": [
+        [
+          {
+            "node": "Find record by invoice number",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find record by invoice number": {
+      "main": [
+        [
+          {
+            "node": "Record found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record found?": {
+      "main": [
+        [
+          {
+            "node": "Mark record paid",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "No matching record",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

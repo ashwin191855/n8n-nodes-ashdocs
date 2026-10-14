@@ -1,0 +1,1093 @@
+{
+  "name": "Send escalating overdue invoice reminders with ASHDOCS, Gmail and Slack",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "### Optional: instant first reminder\nTurn on if you are on a paid ASHDOCS plan (webhooks). It joins the daily flow at **Settings**.",
+        "height": 320,
+        "width": 220,
+        "color": 7
+      },
+      "id": "6db8b981-5810-4891-a845-fd3cdfb2f3d9",
+      "name": "Instant branch label",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "days",
+              "triggerAtHour": 9,
+              "triggerAtMinute": 0
+            }
+          ]
+        }
+      },
+      "id": "672a299a-1bc0-4761-a481-5c69262f573f",
+      "name": "Every day at 09:00",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "events": [
+          "invoice.overdue"
+        ],
+        "options": {}
+      },
+      "id": "9f099883-887e-4227-abbc-0ca2e0504e33",
+      "name": "Invoice overdue",
+      "type": "n8n-nodes-ashdocs.ashdocsTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        300
+      ],
+      "webhookId": "0a32cd48-5a6a-4b70-a163-46762d4bd239",
+      "disabled": true,
+      "credentials": {
+        "ashdocsApi": {
+          "name": "ASHDOCS API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4079108e-be08-4818-a800-a5dcfff09c9a",
+              "name": "yourName",
+              "value": "Your name",
+              "type": "string"
+            },
+            {
+              "id": "e61a1c74-3474-4450-aa92-2d3ae4cc7dcd",
+              "name": "friendlyUpToDays",
+              "value": 3,
+              "type": "number"
+            },
+            {
+              "id": "3ded8879-8f77-49cf-acb8-2d86574e3f1f",
+              "name": "firmUpToDays",
+              "value": 9,
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "7093c0ff-0a5e-4402-a211-16f5a1bb3d7f",
+      "name": "Settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "093b851e-5ec0-4720-ab05-aa7f0b0a6653",
+              "leftValue": "={{ !$json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "ec0c4b3d-67b0-4574-a17b-0971e3c790b0",
+      "name": "Daily run?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "invoice",
+        "operation": "getAll",
+        "returnAll": true,
+        "filters": {
+          "status": "overdue"
+        },
+        "simplify": false
+      },
+      "id": "8d1293e8-9cd2-4354-ae1d-cef981d6a594",
+      "name": "Find overdue invoices",
+      "type": "n8n-nodes-ashdocs.ashdocs",
+      "typeVersion": 1,
+      "position": [
+        720,
+        -60
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "ashdocsApi": {
+          "name": "ASHDOCS API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "00457a8c-c8b6-4491-aea9-31c3e33bffaa",
+              "name": "invoice_id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "d8e76401-86cc-4939-aa3c-728375ca8d90",
+              "name": "invoice_number",
+              "value": "={{ $json.number }}",
+              "type": "string"
+            },
+            {
+              "id": "e7ac5c2b-521f-4196-af34-f6a86119e4e9",
+              "name": "customer_name",
+              "value": "={{ $json.customer?.name || 'there' }}",
+              "type": "string"
+            },
+            {
+              "id": "0390fd66-6a01-4684-ae51-a59df801b5d8",
+              "name": "customer_email",
+              "value": "={{ $json.customer?.email }}",
+              "type": "string"
+            },
+            {
+              "id": "11fce0ed-725d-4d2b-a81f-8295018bd7eb",
+              "name": "amount_due",
+              "value": "={{ $json.totals?.balance_formatted }}",
+              "type": "string"
+            },
+            {
+              "id": "9e71add3-b956-41b2-a379-576e328b1380",
+              "name": "due_date_text",
+              "value": "={{ DateTime.fromISO($json.due_date).toFormat('d LLLL yyyy') }}",
+              "type": "string"
+            },
+            {
+              "id": "b9cc46d3-7427-450a-acd4-aa8f36e88368",
+              "name": "pay_link",
+              "value": "={{ $json.pay_link_url || $json.hosted_url }}",
+              "type": "string"
+            },
+            {
+              "id": "b19ee30b-36d4-45f5-ab17-943488aa9246",
+              "name": "days_overdue",
+              "value": "={{ Math.max(0, Math.floor($today.diff(DateTime.fromISO($json.due_date), 'days').days)) }}",
+              "type": "number"
+            },
+            {
+              "id": "3eb6f2e7-949c-4575-ae7b-70ac76b6e7f0",
+              "name": "step",
+              "value": "={{ (Math.max(0, Math.floor($today.diff(DateTime.fromISO($json.due_date), 'days').days)) <= $('Settings').first().json.friendlyUpToDays ? 'friendly' : Math.max(0, Math.floor($today.diff(DateTime.fromISO($json.due_date), 'days').days)) <= $('Settings').first().json.firmUpToDays ? 'firm' : 'final') }}",
+              "type": "string"
+            },
+            {
+              "id": "e6525c98-8f19-432d-a841-0fc312847b72",
+              "name": "log_key",
+              "value": "={{ $json.number + ' / ' + (Math.max(0, Math.floor($today.diff(DateTime.fromISO($json.due_date), 'days').days)) <= $('Settings').first().json.friendlyUpToDays ? 'friendly' : Math.max(0, Math.floor($today.diff(DateTime.fromISO($json.due_date), 'days').days)) <= $('Settings').first().json.firmUpToDays ? 'firm' : 'final') }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "32725482-d657-4699-ac4e-da9c81a5e2ec",
+      "name": "Choose reminder step",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "89a9c256-7ed5-428c-ac19-2d625a2a4136",
+              "leftValue": "={{ $json.customer_email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "7c62474e-99c3-4c32-a9cb-788f146e8297",
+      "name": "Has an email address",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        1200,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "options": {}
+      },
+      "id": "5817c0ff-66a5-40c2-a085-2c8a319d4e90",
+      "name": "Read reminder log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1440,
+        160
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "executeOnce": true,
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "advanced": true,
+        "mergeByFields": {
+          "values": [
+            {
+              "field1": "log_key",
+              "field2": "Log Key"
+            }
+          ]
+        },
+        "joinMode": "keepNonMatches",
+        "outputDataFrom": "input1",
+        "options": {}
+      },
+      "id": "7c495e5f-a609-49ac-aa93-0c6daac58434",
+      "name": "Skip reminders already sent",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        1680,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "351449e5-fd78-499c-ae76-3af36f254568",
+                    "leftValue": "={{ $json.step }}",
+                    "rightValue": "friendly",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Friendly"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "bbf2e989-c028-4e1c-a6d9-b8c29be997a2",
+                    "leftValue": "={{ $json.step }}",
+                    "rightValue": "firm",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Firm"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "8ffc68de-6840-4aca-afa8-711f26292104",
+                    "leftValue": "={{ $json.step }}",
+                    "rightValue": "final",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Final"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "334881d4-e62b-4df5-accc-4ad3b47cd2af",
+      "name": "Which reminder?",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1920,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aa5da755-aa7d-4964-a475-5af0b96507ce",
+              "name": "subject",
+              "value": "=Quick reminder: invoice {{ $json.invoice_number }}",
+              "type": "string"
+            },
+            {
+              "id": "7d86c31e-cb15-4315-a23d-72eae36a3bc6",
+              "name": "body",
+              "value": "=Hi {{ $json.customer_name }},\n\nJust a friendly reminder that invoice {{ $json.invoice_number }} for {{ $json.amount_due }} was due on {{ $json.due_date_text }}. It may simply have slipped through the cracks.\n\nYou can view and pay it here: {{ $json.pay_link }}\n\nIf you have already paid, thank you, and please ignore this note.\n\nBest,\n{{ $('Settings').first().json.yourName }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "cdac2c02-304b-42b8-ab54-974a7f855f42",
+      "name": "Friendly reminder",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2160,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "9fdf7aa8-4f81-44a9-a988-8ecf7d1494a3",
+              "name": "subject",
+              "value": "=Invoice {{ $json.invoice_number }} is now {{ $json.days_overdue }} days overdue",
+              "type": "string"
+            },
+            {
+              "id": "73813261-31cb-477d-a1b4-be89e84cdf21",
+              "name": "body",
+              "value": "=Hi {{ $json.customer_name }},\n\nInvoice {{ $json.invoice_number }} for {{ $json.amount_due }} was due on {{ $json.due_date_text }} and is now {{ $json.days_overdue }} days overdue. Could you arrange payment this week?\n\nYou can pay online here: {{ $json.pay_link }}\n\nIf something about the invoice is holding it up, reply to this email and I will sort it out.\n\nThanks,\n{{ $('Settings').first().json.yourName }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "efd68e2b-ed25-442f-a740-c025ea638837",
+      "name": "Firm reminder",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2160,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "87a526e0-8141-4bbf-a96d-edf42cdcf0a1",
+              "name": "subject",
+              "value": "=Final reminder: invoice {{ $json.invoice_number }}",
+              "type": "string"
+            },
+            {
+              "id": "1e078dd4-979e-49fe-a5cd-3f50ce085528",
+              "name": "body",
+              "value": "=Hi {{ $json.customer_name }},\n\nThis is a final reminder that invoice {{ $json.invoice_number }} for {{ $json.amount_due }} is {{ $json.days_overdue }} days overdue (it was due on {{ $json.due_date_text }}).\n\nPlease pay it here: {{ $json.pay_link }}\n\nIf you cannot pay right now, reply and tell me when you can, and we will agree a date.\n\nRegards,\n{{ $('Settings').first().json.yourName }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "7dc46dab-5da1-42bf-ae7a-7a13e1a2dadb",
+      "name": "Final notice",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2160,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "bfc2ab31-99d4-4733-ada7-b9c4b1eb4d9d",
+      "name": "All reminders",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        2400,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.customer_email }}",
+        "subject": "={{ $json.subject }}",
+        "emailType": "text",
+        "message": "={{ $json.body }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "2e6f6c46-3ac8-442e-aa8c-db97a8636851",
+      "name": "Email customer",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        2640,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "71ee1bf3-d468-4e32-a882-6e1b6f7ab74a",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "d790bbd4-a607-4794-a02d-4cd2f6d16cc9",
+      "name": "Email sent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2880,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Log Key": "={{ $('Skip reminders already sent').item.json.log_key }}",
+            "Invoice Number": "={{ $('Skip reminders already sent').item.json.invoice_number }}",
+            "Step": "={{ $('Skip reminders already sent').item.json.step }}",
+            "Days Overdue": "={{ $('Skip reminders already sent').item.json.days_overdue }}",
+            "Sent To": "={{ $('Skip reminders already sent').item.json.customer_email }}",
+            "Sent At": "={{ $now.toISO() }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Log Key",
+              "displayName": "Log Key",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Invoice Number",
+              "displayName": "Invoice Number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Step",
+              "displayName": "Step",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Days Overdue",
+              "displayName": "Days Overdue",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Sent To",
+              "displayName": "Sent To",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Sent At",
+              "displayName": "Sent At",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "4d1998fb-1eaf-4c95-ace5-5f5bb0618d51",
+      "name": "Log reminder",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        3120,
+        -100
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "text": "=:warning: The {{ $('Skip reminders already sent').item.json.step }} reminder for invoice {{ $('Skip reminders already sent').item.json.invoice_number }} ({{ $('Skip reminders already sent').item.json.customer_email }}) was not sent: {{ (() => { const e = $json.error; if (typeof e === 'string') return e + ($json.error_description ? ' ' + $json.error_description : ''); const raw = String(e?.message ?? ''); try { const d = JSON.parse(JSON.parse(raw.slice(raw.indexOf('\"')))).detail; return typeof d === 'string' ? d : [d.message].concat((d.errors || []).map(x => x.field + ': ' + x.message)).join(' '); } catch (err) { return raw || 'see the n8n execution'; } })() }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "1e9da461-bb2b-42d8-a3d5-8b5eeb2fa2a6",
+      "name": "Reminder failed",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        3120,
+        140
+      ],
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "text": "=:envelope: Overdue reminders sent: {{ $input.all().length }}\n{{ $input.all().map(i => '• ' + i.json['Invoice Number'] + ' (' + i.json['Step'] + ', ' + i.json['Days Overdue'] + ' days) to ' + i.json['Sent To']).join('\\n') }}",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "118d814b-47a4-46e9-a646-66f7ada981da",
+      "name": "Post summary",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        3360,
+        -100
+      ],
+      "executeOnce": true,
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "**Self-hosted n8n only:** this version uses the community node `n8n-nodes-ashdocs` (n8n verification pending), so it runs on self-hosted n8n. The HTTP version of the same template uses only built-in nodes and also runs on n8n Cloud.\n\n\n## Send escalating overdue invoice reminders with ASHDOCS, Gmail and Slack\n\nAnyone who invoices with ASHDOCS and wants overdue reminders to come from their own Gmail, in their own words, getting firmer the longer an invoice stays unpaid.\n\n### How it works\n1. At 09:00 every day the workflow lists every ASHDOCS invoice with status `overdue`, across all pages.\n2. **Choose reminder step** works out how many days overdue each one is and picks a step: 1–3 days **friendly**, 4–9 **firm**, 10 or more **final** (the limits live in **Settings**).\n3. **Skip reminders already sent** compares each invoice and step with the **Reminder log** sheet, so a customer gets each step once.\n4. Gmail sends the matching email with the amount, due date and pay link, the reminder is logged, and Slack gets one summary of what went out. A failed email posts its own Slack alert.\n5. Optional: the disabled **Invoice overdue** trigger sends the first reminder the moment an invoice becomes overdue. Turn it on if you are on a paid ASHDOCS plan.\n\n### Requirements\n- An ASHDOCS account (https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=overdue-reminders). The daily run works on every ASHDOCS plan, including Free (100 credits a month). The optional instant branch (ASHDOCS Trigger / webhook on invoice.overdue) needs a paid plan (Starter and up), which includes webhooks.\n- A Gmail account\n- A Google Sheets account\n- A Slack account\n- Self-hosted n8n with the community node `n8n-nodes-ashdocs` installed\n\n[ASHDOCS](https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=overdue-reminders) · [Docs](https://www.ashdocs.com/docs)",
+        "height": 800,
+        "width": 540,
+        "color": 1
+      },
+      "id": "19437e57-0449-4cfe-a0b6-d2b8f162429a",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1160,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Setup\n**Plan:** The daily run works on every ASHDOCS plan, including Free (100 credits a month). The optional instant branch (ASHDOCS Trigger / webhook on invoice.overdue) needs a paid plan (Starter and up), which includes webhooks.\n\n1. Create an ASHDOCS account at https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=overdue-reminders and create an API key on the **API Keys** page of the dashboard. A test key makes watermarked test invoices while you try the workflow.\n2. Install the ASHDOCS community node: **Settings → Community nodes → Install**, enter `n8n-nodes-ashdocs`. Then open any ASHDOCS node and create the **ASHDOCS API** credential with your key.\n3. Create a Google Sheet with a tab named **Reminder log** and these columns in row 1: **Log Key, Invoice Number, Step, Days Overdue, Sent To, Sent At**. Pick it in **Read reminder log** and **Log reminder**.\n4. Connect Gmail in **Email customer**, and Slack in **Post summary** and **Reminder failed** (pick a channel).\n5. Fill in **Settings**: your name for the email sign-off, and the day limits if you want different ones.\n6. ASHDOCS can also send its own automatic reminders. If you use this workflow instead, turn those off (Invoicing settings → reminders, or `reminders_enabled: false` per invoice) so customers are not reminded twice.\n7. Optional, paid plan: enable **Invoice overdue** to send the first reminder right away.",
+        "height": 580,
+        "width": 480,
+        "color": 5
+      },
+      "id": "32c489de-ef0d-4e13-a104-465152016700",
+      "name": "Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -580,
+        -320
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Customize\n- Rewrite the three emails in **Friendly reminder**, **Firm reminder** and **Final notice**.\n- Change the day limits in **Settings**, or add a fourth step with another Switch output.\n- Change the schedule time in **Every day at 09:00** (it uses the workflow timezone).\n- CC yourself, or send from a shared inbox, in **Email customer → Options**.",
+        "height": 260,
+        "width": 480,
+        "color": 4
+      },
+      "id": "d9d3b3da-b82c-4a81-af76-1efec73c29b8",
+      "name": "Customize",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -580,
+        300
+      ]
+    }
+  ],
+  "pinData": {
+    "Every day at 09:00": [
+      {
+        "json": {
+          "timestamp": "2026-10-14T09:00:00.000+00:00",
+          "Readable date": "October 14th 2026, 9:00:00 am",
+          "Day of week": "Wednesday",
+          "Timezone": "UTC (UTC+00:00)"
+        }
+      }
+    ],
+    "Invoice overdue": [
+      {
+        "json": {
+          "event": "invoice.overdue",
+          "event_id": "evt_0b1c2d3e4f5a6b7c",
+          "occurred_at": "2026-10-13T00:05:00Z",
+          "delivered_at": "2026-10-13T00:05:00Z",
+          "id": "inv_5f3a9c1d2e7b4a60b8d1",
+          "kind": "invoice",
+          "status": "overdue",
+          "number": "INV-0042",
+          "customer": {
+            "id": "cus_2b7e4c9a1f3d4e5f6a7b",
+            "name": "Northwind Studio",
+            "email": "billing@northwind.example",
+            "phone": null,
+            "address": null,
+            "tax_id": null,
+            "custom_fields": {}
+          },
+          "line_items": [
+            {
+              "description": "Brand identity design",
+              "quantity": "1",
+              "unit_price": "1200.00",
+              "tax_rate": null,
+              "unit": null
+            }
+          ],
+          "currency": "USD",
+          "issue_date": "2026-10-01",
+          "due_date": "2026-10-12",
+          "due_terms": "net_15",
+          "reference": null,
+          "reminders_enabled": true,
+          "testing": false,
+          "totals": {
+            "currency": "USD",
+            "subtotal_minor": 120000,
+            "subtotal_formatted": "$1,200.00",
+            "tax_minor": 0,
+            "tax_formatted": "$0.00",
+            "total_minor": 120000,
+            "total_formatted": "$1,200.00",
+            "deposit_minor": 0,
+            "deposit_formatted": "$0.00",
+            "paid_minor": 0,
+            "paid_formatted": "$0.00",
+            "balance_minor": 120000,
+            "balance_formatted": "$1,200.00"
+          },
+          "pay_link_url": "https://pay.example/northwind-inv-0042",
+          "hosted_url": "https://invoices.example/northwind-inv-0042",
+          "pdf_url": "https://files.example/northwind-inv-0042.pdf",
+          "issued_at": "2026-10-01T09:00:00Z",
+          "sent_at": "2026-10-01T09:00:05Z",
+          "first_viewed_at": null,
+          "paid_at": null,
+          "voided_at": null,
+          "created_at": "2026-10-01T09:00:00Z",
+          "updated_at": "2026-10-13T00:05:00Z"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Every day at 09:00": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice overdue": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Daily run?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily run?": {
+      "main": [
+        [
+          {
+            "node": "Find overdue invoices",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Choose reminder step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find overdue invoices": {
+      "main": [
+        [
+          {
+            "node": "Choose reminder step",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Choose reminder step": {
+      "main": [
+        [
+          {
+            "node": "Has an email address",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has an email address": {
+      "main": [
+        [
+          {
+            "node": "Read reminder log",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Skip reminders already sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read reminder log": {
+      "main": [
+        [
+          {
+            "node": "Skip reminders already sent",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Skip reminders already sent": {
+      "main": [
+        [
+          {
+            "node": "Which reminder?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Which reminder?": {
+      "main": [
+        [
+          {
+            "node": "Friendly reminder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Firm reminder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Final notice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Friendly reminder": {
+      "main": [
+        [
+          {
+            "node": "All reminders",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Firm reminder": {
+      "main": [
+        [
+          {
+            "node": "All reminders",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Final notice": {
+      "main": [
+        [
+          {
+            "node": "All reminders",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "All reminders": {
+      "main": [
+        [
+          {
+            "node": "Email customer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email customer": {
+      "main": [
+        [
+          {
+            "node": "Email sent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email sent?": {
+      "main": [
+        [
+          {
+            "node": "Log reminder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Reminder failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log reminder": {
+      "main": [
+        [
+          {
+            "node": "Post summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

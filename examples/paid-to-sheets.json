@@ -1,0 +1,405 @@
+{
+  "name": "Mark Google Sheets rows paid and notify Slack when an ASHDOCS invoice is paid",
+  "nodes": [
+    {
+      "parameters": {
+        "events": [
+          "invoice.paid"
+        ],
+        "options": {}
+      },
+      "id": "34a38fcd-aceb-41d0-a2ea-abf645b3f015",
+      "name": "Invoice paid",
+      "type": "n8n-nodes-ashdocs.ashdocsTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "c4fcf9d6-6fc5-4e8f-a56b-5611249282c5",
+      "credentials": {
+        "ashdocsApi": {
+          "name": "ASHDOCS API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Invoice Number",
+              "lookupValue": "={{ $('Invoice paid').item.json.number }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8183e594-414c-4f46-a961-379c75b56cf0",
+      "name": "Find invoice row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        240,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "alwaysOutputData": true,
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "044803b3-81d3-4e81-a433-811ac1efb354",
+              "leftValue": "={{ $json.row_number }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "cce62475-1c6d-478f-aa23-57f29a1956d8",
+      "name": "Row found?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "row_number": "={{ $json.row_number }}",
+            "Status": "paid",
+            "Paid Date": "={{ DateTime.fromISO($('Invoice paid').item.json.paid_at || $now.toISO()).toFormat('yyyy-MM-dd') }}"
+          },
+          "matchingColumns": [
+            "row_number"
+          ],
+          "schema": [
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Paid Date",
+              "displayName": "Paid Date",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "447cc9fc-af7f-4dfb-a7bd-7f4c3ec61a65",
+      "name": "Mark row paid",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        720,
+        -100
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "text": "=:moneybag: {{ $('Invoice paid').item.json.customer.name }} paid invoice {{ $('Invoice paid').item.json.number }} ({{ $('Invoice paid').item.json.totals.total_formatted }}), but no row in the sheet has that invoice number. Add it by hand if you track it there.",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "1f0da0a0-28c3-4977-a515-6a9ee96e755a",
+      "name": "Paid, no matching row",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        720,
+        140
+      ],
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "",
+          "mode": "list"
+        },
+        "text": "=:white_check_mark: {{ $('Invoice paid').item.json.customer.name }} paid invoice {{ $('Invoice paid').item.json.number }} ({{ $('Invoice paid').item.json.totals.total_formatted }}). Row {{ $('Row found?').item.json.row_number }} is marked paid.",
+        "otherOptions": {
+          "includeLinkToWorkflow": false
+        }
+      },
+      "id": "61811908-051f-484e-a838-049e6911cf3c",
+      "name": "Post payment",
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.3,
+      "position": [
+        960,
+        -100
+      ],
+      "credentials": {
+        "slackApi": {
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "**Self-hosted n8n only:** this version uses the community node `n8n-nodes-ashdocs` (n8n verification pending), so it runs on self-hosted n8n. The HTTP version of the same template uses only built-in nodes and also runs on n8n Cloud.\n\n\n## Mark Google Sheets rows paid and notify Slack when an ASHDOCS invoice is paid\n\nTeams that keep an invoice sheet (for example the one the \"Create and email invoices from new Google Sheets rows\" template fills) and want it to show payments without anyone updating it.\n\n### How it works\n1. ASHDOCS tells n8n the moment an invoice is paid in full.\n2. **Find invoice row** looks the invoice number up in your sheet.\n3. If the row is there, **Mark row paid** sets Status `paid` and Paid Date, and Slack gets a payment message.\n4. If no row matches, nothing fails: Slack gets a different message so you can add the row yourself.\n\n### Requirements\n- An ASHDOCS account (https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=paid-to-sheets). Needs a paid ASHDOCS plan (Starter and up): the invoice events (sent, viewed, paid, overdue) are delivered by webhooks, which the Free plan does not include.\n- A Google Sheets account\n- A Slack account\n- Self-hosted n8n with the community node `n8n-nodes-ashdocs` installed\n\n[ASHDOCS](https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=paid-to-sheets) · [Docs](https://www.ashdocs.com/docs)",
+        "height": 660,
+        "width": 540,
+        "color": 1
+      },
+      "id": "562a2425-c42e-41a9-a809-505b84e0dcde",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1160,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Setup\n**Plan:** Needs a paid ASHDOCS plan (Starter and up): the invoice events (sent, viewed, paid, overdue) are delivered by webhooks, which the Free plan does not include.\n\n1. Create an ASHDOCS account at https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=paid-to-sheets and create an API key on the **API Keys** page of the dashboard. A test key makes watermarked test invoices while you try the workflow.\n2. Install the ASHDOCS community node: **Settings → Community nodes → Install**, enter `n8n-nodes-ashdocs`. Then open any ASHDOCS node and create the **ASHDOCS API** credential with your key.\n3. Your sheet needs the columns **Invoice Number, Status, Paid Date** (the Sheets-to-invoice template’s sheet plus a Paid Date column works). Pick it in **Find invoice row** and **Mark row paid**.\n4. Connect Slack in **Post payment** and **Paid, no matching row**, and pick a channel.\n5. Activate the workflow. The **ASHDOCS Trigger** registers its own signed webhook for `invoice.paid` in your ASHDOCS account, and removes it when you deactivate the workflow.\n6. To test without a real payment, use the pinned sample data (**Test workflow**), or record a test payment on a test invoice in ASHDOCS.",
+        "height": 500,
+        "width": 480,
+        "color": 5
+      },
+      "id": "97726e9f-dfd9-4659-a0dd-7bf0022e2cb8",
+      "name": "Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -580,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Customize\n- Write more columns in **Mark row paid**, such as the amount paid (`totals.paid_formatted`).\n- Mention a person or a channel in the Slack text.\n- Add the Invoice Viewed or Overdue event to the trigger and route each to its own column.",
+        "height": 220,
+        "width": 480,
+        "color": 4
+      },
+      "id": "6210c8af-5899-4dcd-a584-ea12985399a9",
+      "name": "Customize",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -580,
+        240
+      ]
+    }
+  ],
+  "pinData": {
+    "Invoice paid": [
+      {
+        "json": {
+          "event": "invoice.paid",
+          "event_id": "evt_0b1c2d3e4f5a6b7c",
+          "occurred_at": "2026-10-14T10:22:31Z",
+          "delivered_at": "2026-10-14T10:22:31Z",
+          "id": "inv_5f3a9c1d2e7b4a60b8d1",
+          "kind": "invoice",
+          "status": "paid",
+          "number": "INV-0042",
+          "customer": {
+            "id": "cus_2b7e4c9a1f3d4e5f6a7b",
+            "name": "Northwind Studio",
+            "email": "billing@northwind.example",
+            "phone": null,
+            "address": null,
+            "tax_id": null,
+            "custom_fields": {}
+          },
+          "line_items": [
+            {
+              "description": "Brand identity design",
+              "quantity": "1",
+              "unit_price": "1200.00",
+              "tax_rate": null,
+              "unit": null
+            }
+          ],
+          "currency": "USD",
+          "issue_date": "2026-10-01",
+          "due_date": "2026-10-15",
+          "due_terms": "net_15",
+          "reference": null,
+          "reminders_enabled": true,
+          "testing": false,
+          "totals": {
+            "currency": "USD",
+            "subtotal_minor": 120000,
+            "subtotal_formatted": "$1,200.00",
+            "tax_minor": 0,
+            "tax_formatted": "$0.00",
+            "total_minor": 120000,
+            "total_formatted": "$1,200.00",
+            "deposit_minor": 0,
+            "deposit_formatted": "$0.00",
+            "paid_minor": 120000,
+            "paid_formatted": "$1,200.00",
+            "balance_minor": 0,
+            "balance_formatted": "$0.00"
+          },
+          "pay_link_url": "https://pay.example/northwind-inv-0042",
+          "hosted_url": "https://invoices.example/northwind-inv-0042",
+          "pdf_url": "https://files.example/northwind-inv-0042.pdf",
+          "issued_at": "2026-10-01T09:00:00Z",
+          "sent_at": "2026-10-01T09:00:05Z",
+          "first_viewed_at": null,
+          "paid_at": "2026-10-14T10:22:31Z",
+          "voided_at": null,
+          "created_at": "2026-10-01T09:00:00Z",
+          "updated_at": "2026-10-14T10:22:31Z"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Invoice paid": {
+      "main": [
+        [
+          {
+            "node": "Find invoice row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find invoice row": {
+      "main": [
+        [
+          {
+            "node": "Row found?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Row found?": {
+      "main": [
+        [
+          {
+            "node": "Mark row paid",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Paid, no matching row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark row paid": {
+      "main": [
+        [
+          {
+            "node": "Post payment",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

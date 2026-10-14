@@ -1,0 +1,429 @@
+{
+  "name": "Email a branded PDF receipt after a Stripe payment with ASHDOCS Generate PDF",
+  "nodes": [
+    {
+      "parameters": {
+        "events": [
+          "payment_intent.succeeded"
+        ]
+      },
+      "id": "09978ad4-51c5-487a-ab83-e8a04875a8a2",
+      "name": "Stripe payment succeeded",
+      "type": "n8n-nodes-base.stripeTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "0a4076c5-24e0-42bf-aee2-558b4431c7ea",
+      "credentials": {
+        "stripeApi": {
+          "name": "Stripe account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0cbb227d-09b2-4f37-a1d1-b5b3c445e2b3",
+              "name": "businessName",
+              "value": "Your business",
+              "type": "string"
+            },
+            {
+              "id": "206dcaaf-b223-4823-ae1e-7e02297f059b",
+              "name": "businessAddress",
+              "value": "1 Example Street, Example City",
+              "type": "string"
+            },
+            {
+              "id": "75c57151-667c-49f3-a9e4-0b8920f75268",
+              "name": "supportEmail",
+              "value": "hello@yourbusiness.example",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "4544a9ca-a46e-40c5-ae8a-6dc700338e01",
+      "name": "Settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "0e8fae05-6cc6-44cb-a62a-39033997fa27",
+              "leftValue": "={{ $json.data.object.receipt_email || $json.data.object.metadata?.email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "55ad8935-21fb-44b6-abee-18481f99f955",
+      "name": "Has a receipt email",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "// Receipt fields from the Stripe PaymentIntent, HTML-escaped for the receipt template.\nconst pi = $json.data.object;\nconst settings = $('Settings').first().json;\nconst esc = (v) => String(v ?? '').replace(/[&<>\"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' })[ch]);\n\n// Stripe amounts are in the smallest unit; these currencies have no decimals.\nconst zeroDecimal = ['bif', 'clp', 'djf', 'gnf', 'jpy', 'kmf', 'krw', 'mga', 'pyg', 'rwf', 'ugx', 'vnd', 'vuv', 'xaf', 'xof', 'xpf'];\nconst minor = pi.amount_received ?? pi.amount;\nconst amount = new Intl.NumberFormat('en-US', { style: 'currency', currency: pi.currency.toUpperCase() })\n  .format(minor / (zeroDecimal.includes(pi.currency) ? 1 : 100));\nconst email = pi.receipt_email || pi.metadata?.email;\n\nreturn {\n  json: {\n    customerEmail: email,\n    customerName: esc(pi.metadata?.customer_name || email),\n    description: esc(pi.description || 'Payment'),\n    amount,\n    paidOn: DateTime.fromSeconds(pi.created).toFormat('d LLLL yyyy'),\n    paymentId: pi.id,\n    receiptNumber: 'R-' + pi.id.slice(-8).toUpperCase(),\n    businessName: esc(settings.businessName),\n    businessAddress: esc(settings.businessAddress),\n    supportEmail: esc(settings.supportEmail),\n  },\n};"
+      },
+      "id": "342e7b7b-fba2-4ac2-afb1-671876c0fa2a",
+      "name": "Receipt details",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        720,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "5d7b5a41-45a4-4178-abd4-c8185e0eba63",
+              "name": "html",
+              "value": "=<!doctype html>\n<html><head><meta charset=\"utf-8\"><style>\n  body { font-family: Helvetica, Arial, sans-serif; color: #1f2933; margin: 48px; font-size: 14px; }\n  .top { display: flex; justify-content: space-between; align-items: flex-start; }\n  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -0.5px; }\n  .muted { color: #6b7785; }\n  .paid { display: inline-block; border: 2px solid #1a7f4b; color: #1a7f4b; border-radius: 4px; padding: 4px 10px; font-weight: bold; letter-spacing: 1px; }\n  table { width: 100%; border-collapse: collapse; margin-top: 32px; }\n  th { text-align: left; font-size: 12px; text-transform: uppercase; color: #6b7785; border-bottom: 1px solid #d9dee3; padding: 8px 0; }\n  td { padding: 12px 0; border-bottom: 1px solid #eef1f4; }\n  .num { text-align: right; }\n  .total td { font-size: 16px; font-weight: bold; border-bottom: none; }\n  .foot { margin-top: 48px; font-size: 12px; }\n</style></head><body>\n  <div class=\"top\">\n    <div><h1>{{ $json.businessName }}</h1><div class=\"muted\">{{ $json.businessAddress }}</div></div>\n    <div class=\"num\"><div class=\"paid\">PAID</div><div class=\"muted\" style=\"margin-top:8px\">Receipt {{ $json.receiptNumber }}</div><div class=\"muted\">{{ $json.paidOn }}</div></div>\n  </div>\n  <p style=\"margin-top:32px\"><strong>Received from</strong><br>{{ $json.customerName }}<br><span class=\"muted\">{{ $json.customerEmail }}</span></p>\n  <table>\n    <tr><th>Description</th><th class=\"num\">Amount</th></tr>\n    <tr><td>{{ $json.description }}</td><td class=\"num\">{{ $json.amount }}</td></tr>\n    <tr class=\"total\"><td>Total paid</td><td class=\"num\">{{ $json.amount }}</td></tr>\n  </table>\n  <p class=\"foot muted\">Payment reference {{ $json.paymentId }}. Questions about this receipt? Write to {{ $json.supportEmail }}.</p>\n</body></html>",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "bbee7951-8589-4ea3-aab5-7aa93e98d947",
+      "name": "Build receipt HTML",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "document",
+        "operation": "generatePdf",
+        "source": "html",
+        "html": "={{ $json.html }}",
+        "format": "A4",
+        "download": true,
+        "binaryPropertyName": "data"
+      },
+      "id": "552c866a-52e5-4c2d-a878-0cfced4f1ebf",
+      "name": "Generate PDF",
+      "type": "n8n-nodes-ashdocs.ashdocs",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        0
+      ],
+      "credentials": {
+        "ashdocsApi": {
+          "name": "ASHDOCS API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Receipt details').item.json.customerEmail }}",
+        "subject": "=Your receipt from {{ $('Settings').first().json.businessName }}",
+        "emailType": "text",
+        "message": "=Hi,\n\nThank you for your payment of {{ $('Receipt details').item.json.amount }}. Your receipt is attached.\n\n{{ $('Settings').first().json.businessName }}",
+        "options": {
+          "appendAttribution": false,
+          "attachmentsUi": {
+            "attachmentsBinary": [
+              {
+                "property": "data"
+              }
+            ]
+          }
+        }
+      },
+      "id": "f75a51c8-c9c9-444d-a12b-c8e07a334642",
+      "name": "Email receipt",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1440,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "71ee1bf3-d468-4e32-a882-6e1b6f7ab74a",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "f69d3827-462c-4c1c-a884-42bbc52fae6f",
+      "name": "Receipt sent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1680,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('Settings').first().json.supportEmail }}",
+        "subject": "=Receipt not sent for {{ $('Receipt details').item.json.paymentId }}",
+        "emailType": "text",
+        "message": "=The PDF receipt for payment {{ $('Receipt details').item.json.paymentId }} ({{ $('Receipt details').item.json.amount }}, {{ $('Receipt details').item.json.customerEmail }}) could not be emailed: {{ (() => { const e = $json.error; if (typeof e === 'string') return e + ($json.error_description ? ' ' + $json.error_description : ''); const raw = String(e?.message ?? ''); try { const d = JSON.parse(JSON.parse(raw.slice(raw.indexOf('\"')))).detail; return typeof d === 'string' ? d : [d.message].concat((d.errors || []).map(x => x.field + ': ' + x.message)).join(' '); } catch (err) { return raw || 'see the n8n execution'; } })() }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "89374e17-c4e8-412a-ab89-0eaff0a1d64a",
+      "name": "Tell me it failed",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1920,
+        140
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "**Self-hosted n8n only:** this version uses the community node `n8n-nodes-ashdocs` (n8n verification pending), so it runs on self-hosted n8n. The HTTP version of the same template uses only built-in nodes and also runs on n8n Cloud.\n\n\n## Email a branded PDF receipt after a Stripe payment with ASHDOCS Generate PDF\n\nShops, course creators and service businesses that take payments with Stripe and want to send their own branded PDF receipt, without building a PDF service.\n\n### How it works\n1. The **Stripe Trigger** fires on `payment_intent.succeeded`.\n2. **Receipt details** formats the amount (zero-decimal currencies such as JPY included), date and customer, and escapes anything that came from Stripe.\n3. **Build receipt HTML** fills a clean, inline-styled receipt template with your business name from **Settings**.\n4. **Generate PDF** (ASHDOCS) renders the HTML to a PDF file.\n5. Gmail emails the PDF to the customer. If Gmail fails, you get an email about it instead.\n\n### Requirements\n- An ASHDOCS account (https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=stripe-receipt-pdf). Works on every ASHDOCS plan, including Free (100 credits a month).\n- A Stripe account\n- A Gmail account\n- Self-hosted n8n with the community node `n8n-nodes-ashdocs` installed\n\n[ASHDOCS](https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=stripe-receipt-pdf) · [Docs](https://www.ashdocs.com/docs)",
+        "height": 680,
+        "width": 540,
+        "color": 1
+      },
+      "id": "b95a64c4-d54a-4f8c-a250-bc077e0a7df4",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1160,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Setup\n**Plan:** Works on every ASHDOCS plan, including Free (100 credits a month).\n\n1. Create an ASHDOCS account at https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=stripe-receipt-pdf and create an API key on the **API Keys** page of the dashboard. A test key makes watermarked test invoices while you try the workflow.\n2. Install the ASHDOCS community node: **Settings → Community nodes → Install**, enter `n8n-nodes-ashdocs`. Then open any ASHDOCS node and create the **ASHDOCS API** credential with your key.\n3. Connect Stripe in **Stripe payment succeeded** (a restricted key with read access to PaymentIntents and write access to webhook endpoints is enough). n8n registers the Stripe webhook when you activate the workflow.\n4. Connect Gmail in **Email receipt** and **Tell me it failed**.\n5. Fill in **Settings**: business name, address, and the support email shown on the receipt (failure alerts go there too).\n6. Make sure your checkout collects an email: the receipt goes to `receipt_email`, or to `metadata.email` if you set that instead.",
+        "height": 460,
+        "width": 480,
+        "color": 5
+      },
+      "id": "a07be179-af52-415f-ac86-a6060e2bed0e",
+      "name": "Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -580,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Customize\n- Restyle the receipt in **Build receipt HTML** (it is plain HTML and CSS); add your logo with an `<img>` tag pointing to a public image URL.\n- Change the paper size in **Generate PDF** (A4 or Letter).\n- Also save the PDF to Google Drive or attach it to a CRM record.",
+        "height": 200,
+        "width": 480,
+        "color": 4
+      },
+      "id": "f27a2a8e-4d7b-4e48-ad8a-45d98c0da223",
+      "name": "Customize",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -580,
+        200
+      ]
+    }
+  ],
+  "pinData": {
+    "Stripe payment succeeded": [
+      {
+        "json": {
+          "id": "evt_3Q0northwind0001",
+          "object": "event",
+          "type": "payment_intent.succeeded",
+          "created": 1791972000,
+          "livemode": false,
+          "data": {
+            "object": {
+              "id": "pi_3Q0northwind0001",
+              "object": "payment_intent",
+              "amount": 45000,
+              "amount_received": 45000,
+              "currency": "usd",
+              "status": "succeeded",
+              "created": 1791971990,
+              "description": "Brand workshop (half day)",
+              "receipt_email": "billing@northwind.example",
+              "metadata": {
+                "customer_name": "Northwind Studio"
+              },
+              "payment_method_types": [
+                "card"
+              ]
+            }
+          }
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Stripe payment succeeded": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Has a receipt email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has a receipt email": {
+      "main": [
+        [
+          {
+            "node": "Receipt details",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Receipt details": {
+      "main": [
+        [
+          {
+            "node": "Build receipt HTML",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build receipt HTML": {
+      "main": [
+        [
+          {
+            "node": "Generate PDF",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate PDF": {
+      "main": [
+        [
+          {
+            "node": "Email receipt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Email receipt": {
+      "main": [
+        [
+          {
+            "node": "Receipt sent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Receipt sent?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Tell me it failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

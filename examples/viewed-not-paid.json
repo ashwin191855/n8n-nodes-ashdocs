@@ -1,0 +1,357 @@
+{
+  "name": "Follow up personally when an invoice is viewed but unpaid after 3 days (ASHDOCS + Gmail)",
+  "nodes": [
+    {
+      "parameters": {
+        "events": [
+          "invoice.viewed"
+        ],
+        "options": {}
+      },
+      "id": "60028e1a-68ce-4ff3-a191-30ecaf3541a8",
+      "name": "Invoice viewed",
+      "type": "n8n-nodes-ashdocs.ashdocsTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "09f46f64-29d6-45aa-a50d-8f2ffdf8e1a2",
+      "credentials": {
+        "ashdocsApi": {
+          "name": "ASHDOCS API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "fd9819c4-1e61-4d6d-a8fd-8517cc4c410c",
+              "name": "yourName",
+              "value": "Your name",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "bd946a86-02ff-4557-a0e0-664123f52757",
+      "name": "Settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 3,
+        "unit": "days"
+      },
+      "id": "eddfdea9-f765-4603-afe0-8cc1fbafbdef",
+      "name": "Wait 3 days",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        480,
+        0
+      ],
+      "webhookId": "a1a2d71b-1eed-4949-a347-54f999c78918"
+    },
+    {
+      "parameters": {
+        "resource": "invoice",
+        "operation": "get",
+        "getBy": "id",
+        "invoiceId": "={{ $('Settings').item.json.id }}",
+        "simplify": false
+      },
+      "id": "4271341c-3f36-47eb-ae56-12d3d0338678",
+      "name": "Get invoice",
+      "type": "n8n-nodes-ashdocs.ashdocs",
+      "typeVersion": 1,
+      "position": [
+        720,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "ashdocsApi": {
+          "name": "ASHDOCS API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "4d517531-1f9c-4b07-a647-2f37fa81a512",
+              "leftValue": "={{ !['paid', 'void'].includes($json.status) && Number($json.totals?.balance_minor ?? 0) > 0 }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            },
+            {
+              "id": "a6ec1d1d-8881-44f1-aac6-fff247f7ed31",
+              "leftValue": "={{ $json.customer?.email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "39ad5b13-ac2e-49e3-a4fb-8c957c908c9e",
+      "name": "Still unpaid?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        960,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.customer.email }}",
+        "subject": "=Invoice {{ $json.number }}",
+        "emailType": "text",
+        "message": "=Hi {{ $json.customer.name || 'there' }},\n\nJust checking in on invoice {{ $json.number }} for {{ $json.totals.balance_formatted }}. Did you have any questions about it? Happy to help if anything is unclear.\n\nHere is the link again in case it is useful: {{ $json.pay_link_url || $json.hosted_url }}\n\nThanks,\n{{ $('Settings').first().json.yourName }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "dd600162-371c-43e9-a541-eb2d79df93b1",
+      "name": "Personal follow-up",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [
+        1200,
+        -100
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "3985c315-e7eb-415e-ace0-197d6b4ff42f",
+      "name": "Already paid",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1200,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Self-hosted n8n only:** this version uses the community node `n8n-nodes-ashdocs` (n8n verification pending), so it runs on self-hosted n8n. The HTTP version of the same template uses only built-in nodes and also runs on n8n Cloud.\n\n\n## Follow up personally when an invoice is viewed but unpaid after 3 days (ASHDOCS + Gmail)\n\nFreelancers and account managers who would rather send a short, personal check-in than another automated reminder when a client has looked at an invoice but not paid.\n\n### How it works\n1. ASHDOCS reports the first time the client opens the invoice page (`invoice.viewed` fires once per invoice).\n2. The workflow waits three days.\n3. **Get invoice** reads the invoice again. If it is still unpaid (not paid or void, with a balance left), Gmail sends a short note from you with the pay link; otherwise the run ends.\n\n### Requirements\n- An ASHDOCS account (https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=viewed-not-paid). Needs a paid ASHDOCS plan (Starter and up): the invoice events (sent, viewed, paid, overdue) are delivered by webhooks, which the Free plan does not include.\n- A Gmail account\n- Self-hosted n8n with the community node `n8n-nodes-ashdocs` installed\n\n[ASHDOCS](https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=viewed-not-paid) · [Docs](https://www.ashdocs.com/docs)",
+        "height": 640,
+        "width": 540,
+        "color": 1
+      },
+      "id": "a0d214f6-4066-4458-ace5-b7fa31ada560",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1160,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Setup\n**Plan:** Needs a paid ASHDOCS plan (Starter and up): the invoice events (sent, viewed, paid, overdue) are delivered by webhooks, which the Free plan does not include.\n\n1. Create an ASHDOCS account at https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=viewed-not-paid and create an API key on the **API Keys** page of the dashboard. A test key makes watermarked test invoices while you try the workflow.\n2. Install the ASHDOCS community node: **Settings → Community nodes → Install**, enter `n8n-nodes-ashdocs`. Then open any ASHDOCS node and create the **ASHDOCS API** credential with your key.\n3. Connect Gmail in **Personal follow-up**.\n4. Put your name in **Settings**.\n5. Activate the workflow. The **ASHDOCS Trigger** registers its own signed webhook for `invoice.viewed` in your ASHDOCS account, and removes it when you deactivate the workflow.\n6. The **Wait** node keeps the execution in n8n’s database for three days. That needs an n8n that keeps running with a persistent database (n8n Cloud, or self-hosted with a database volume). A container that loses its data on restart loses waiting executions.",
+        "height": 480,
+        "width": 480,
+        "color": 5
+      },
+      "id": "17c9896e-5fb2-44e2-aca9-12237001a8f5",
+      "name": "Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -580,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Customize\n- Change the wait in **Wait 3 days**.\n- Rewrite the note in **Personal follow-up**; keep it short, it is meant to read like you typed it.\n- Notify yourself on Slack instead of emailing the client.",
+        "height": 200,
+        "width": 480,
+        "color": 4
+      },
+      "id": "38f32921-c194-448d-aca0-e5510d4830f4",
+      "name": "Customize",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -580,
+        220
+      ]
+    }
+  ],
+  "pinData": {
+    "Invoice viewed": [
+      {
+        "json": {
+          "event": "invoice.viewed",
+          "event_id": "evt_0b1c2d3e4f5a6b7c",
+          "occurred_at": "2026-10-02T14:11:09Z",
+          "delivered_at": "2026-10-02T14:11:09Z",
+          "id": "inv_5f3a9c1d2e7b4a60b8d1",
+          "kind": "invoice",
+          "status": "viewed",
+          "number": "INV-0042",
+          "customer": {
+            "id": "cus_2b7e4c9a1f3d4e5f6a7b",
+            "name": "Northwind Studio",
+            "email": "billing@northwind.example",
+            "phone": null,
+            "address": null,
+            "tax_id": null,
+            "custom_fields": {}
+          },
+          "line_items": [
+            {
+              "description": "Brand identity design",
+              "quantity": "1",
+              "unit_price": "1200.00",
+              "tax_rate": null,
+              "unit": null
+            }
+          ],
+          "currency": "USD",
+          "issue_date": "2026-10-01",
+          "due_date": "2026-10-15",
+          "due_terms": "net_15",
+          "reference": null,
+          "reminders_enabled": true,
+          "testing": false,
+          "totals": {
+            "currency": "USD",
+            "subtotal_minor": 120000,
+            "subtotal_formatted": "$1,200.00",
+            "tax_minor": 0,
+            "tax_formatted": "$0.00",
+            "total_minor": 120000,
+            "total_formatted": "$1,200.00",
+            "deposit_minor": 0,
+            "deposit_formatted": "$0.00",
+            "paid_minor": 0,
+            "paid_formatted": "$0.00",
+            "balance_minor": 120000,
+            "balance_formatted": "$1,200.00"
+          },
+          "pay_link_url": "https://pay.example/northwind-inv-0042",
+          "hosted_url": "https://invoices.example/northwind-inv-0042",
+          "pdf_url": "https://files.example/northwind-inv-0042.pdf",
+          "issued_at": "2026-10-01T09:00:00Z",
+          "sent_at": "2026-10-01T09:00:05Z",
+          "first_viewed_at": "2026-10-02T14:11:09Z",
+          "paid_at": null,
+          "voided_at": null,
+          "created_at": "2026-10-01T09:00:00Z",
+          "updated_at": "2026-10-02T14:11:09Z"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Invoice viewed": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Wait 3 days",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait 3 days": {
+      "main": [
+        [
+          {
+            "node": "Get invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get invoice": {
+      "main": [
+        [
+          {
+            "node": "Still unpaid?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Still unpaid?": {
+      "main": [
+        [
+          {
+            "node": "Personal follow-up",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Already paid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}

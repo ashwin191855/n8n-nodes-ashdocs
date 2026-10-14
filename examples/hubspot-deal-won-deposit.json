@@ -1,0 +1,672 @@
+{
+  "name": "Create a deposit invoice when a HubSpot deal is won with ASHDOCS",
+  "nodes": [
+    {
+      "parameters": {
+        "eventsUi": {
+          "eventValues": [
+            {
+              "name": "deal.propertyChange",
+              "property": "dealstage"
+            }
+          ]
+        },
+        "additionalFields": {}
+      },
+      "id": "85b1d378-0e66-4a17-a2e9-c59a3e1cafbe",
+      "name": "Deal stage changed",
+      "type": "n8n-nodes-base.hubspotTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "63697fd3-c8a8-4c1d-ab02-2915d6f58b69",
+      "credentials": {
+        "hubspotDeveloperApi": {
+          "name": "HubSpot developer app"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e20e54e5-2013-431b-a049-427e04e9bebb",
+              "leftValue": "={{ $json.propertyValue }}",
+              "rightValue": "closedwon",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "a7f7503d-b037-4d27-a50e-871ef59505d2",
+      "name": "Deal won",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "12b2c977-36f2-4f27-ad72-7f5c5b527258",
+              "name": "depositPercent",
+              "value": 30,
+              "type": "number"
+            },
+            {
+              "id": "ca9c7ce4-64c9-46c3-a197-8141e20f582c",
+              "name": "currency",
+              "value": "USD",
+              "type": "string"
+            },
+            {
+              "id": "0a2a6c4d-5654-4ab4-a3b9-25e9134c73c8",
+              "name": "dueTerms",
+              "value": "on_receipt",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "9e4ea1c8-629f-4492-a350-1f9748b876c9",
+      "name": "Settings",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        480,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "appToken",
+        "resource": "deal",
+        "operation": "get",
+        "dealId": {
+          "__rl": true,
+          "value": "={{ $json.objectId }}",
+          "mode": "id"
+        },
+        "filters": {}
+      },
+      "id": "17f43994-aa26-4f9c-a670-c059fc0e3cb9",
+      "name": "Get deal",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.1,
+      "position": [
+        720,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "hubspotAppToken": {
+          "name": "HubSpot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "appToken",
+        "resource": "company",
+        "operation": "get",
+        "companyId": {
+          "__rl": true,
+          "value": "={{ $('Get deal').item.json.associations?.associatedCompanyIds?.[0] }}",
+          "mode": "id"
+        },
+        "additionalFields": {}
+      },
+      "id": "d3a17a8c-6f6c-4701-a371-7a492c69a260",
+      "name": "Get company",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.1,
+      "position": [
+        960,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "hubspotAppToken": {
+          "name": "HubSpot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "appToken",
+        "resource": "contact",
+        "operation": "get",
+        "contactId": {
+          "__rl": true,
+          "value": "={{ $('Get deal').item.json.associations?.associatedVids?.[0] }}",
+          "mode": "id"
+        },
+        "additionalFields": {}
+      },
+      "id": "94fc6ccb-1a2b-409a-a5c2-0ac620230157",
+      "name": "Get contact",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.1,
+      "position": [
+        1200,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "hubspotAppToken": {
+          "name": "HubSpot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "140e02f2-cf1b-478c-a2f5-edd759c610e9",
+              "leftValue": "={{ $('Get contact').item.json.properties?.email?.value }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "0a085c1d-73f9-43d5-a1aa-8a6014bc17dd",
+      "name": "Contact has an email?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1440,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "errorMessage": "=Deal {{ $('Get deal').item.json.properties?.dealname?.value }} has no associated contact with an email, so no deposit invoice was created."
+      },
+      "id": "b1246669-8251-4852-a29a-c9b7baac016f",
+      "name": "Stop: no contact email",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "customer",
+        "operation": "create",
+        "name": "={{ $('Get company').item.json.properties?.name?.value || $('Get deal').item.json.properties?.dealname?.value }}",
+        "email": "={{ $('Get contact').item.json.properties?.email?.value }}",
+        "additionalFields": {},
+        "onDuplicate": "existing"
+      },
+      "id": "99a6ca55-814f-4ad5-ab3b-2f3c88182d8a",
+      "name": "Find or create customer",
+      "type": "n8n-nodes-ashdocs.ashdocs",
+      "typeVersion": 1,
+      "position": [
+        1680,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 3,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "ashdocsApi": {
+          "name": "ASHDOCS API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.ashdocs.com/api/v1/invoices",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "ashdocsApi",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Idempotency-Key",
+              "value": "=hubspot-deal-{{ $('Get deal').item.json.dealId }}-won"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  customer: {\n    id: $json.id\n  },\n  line_items: [\n    {\n      description: $('Get deal').item.json.properties?.dealname?.value || 'Project',\n      quantity: \"1\",\n      unit_price: String($('Get deal').item.json.properties?.amount?.value || 0)\n    }\n  ],\n  currency: $('Settings').first().json.currency,\n  due_terms: $('Settings').first().json.dueTerms,\n  deposit: {\n    type: \"pct\",\n    value: String($('Settings').first().json.depositPercent)\n  },\n  reference: 'HubSpot deal ' + $('Get deal').item.json.dealId,\n  issue: true\n}) }}",
+        "options": {}
+      },
+      "id": "9890ecfc-432f-4a9c-a2c0-ce1cedf3ffa1",
+      "name": "Create deposit invoice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1920,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "ashdocsApi": {
+          "name": "ASHDOCS API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "71ee1bf3-d468-4e32-a882-6e1b6f7ab74a",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "e3f20acb-075b-491c-af55-dcc95a3928db",
+      "name": "Invoice created?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2160,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "invoice",
+        "operation": "send",
+        "invoiceId": "={{ $('Create deposit invoice').item.json.id }}",
+        "sendOptions": {}
+      },
+      "id": "bad4a8cb-308a-44e9-a182-eecab817f087",
+      "name": "Send invoice",
+      "type": "n8n-nodes-ashdocs.ashdocs",
+      "typeVersion": 1,
+      "position": [
+        2400,
+        0
+      ],
+      "onError": "continueRegularOutput",
+      "credentials": {
+        "ashdocsApi": {
+          "name": "ASHDOCS API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "71ee1bf3-d468-4e32-a882-6e1b6f7ab74a",
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": true,
+        "options": {}
+      },
+      "id": "c4c6fb9c-afb1-41eb-a367-929b32bab1b6",
+      "name": "Invoice sent?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        2640,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "authentication": "appToken",
+        "resource": "deal",
+        "operation": "update",
+        "dealId": {
+          "__rl": true,
+          "value": "={{ $('Get deal').item.json.dealId }}",
+          "mode": "id"
+        },
+        "updateFields": {
+          "customPropertiesUi": {
+            "customPropertiesValues": [
+              {
+                "property": "ashdocs_pay_link",
+                "value": "={{ $('Create deposit invoice').item.json.pay_link_url || $('Create deposit invoice').item.json.hosted_url }}"
+              },
+              {
+                "property": "ashdocs_invoice_number",
+                "value": "={{ $('Create deposit invoice').item.json.number }}"
+              }
+            ]
+          }
+        }
+      },
+      "id": "39e4f3f0-c95b-437c-ad13-b1597c2ce896",
+      "name": "Save pay link on deal",
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.1,
+      "position": [
+        2880,
+        -100
+      ],
+      "credentials": {
+        "hubspotAppToken": {
+          "name": "HubSpot account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "errorMessage": "=The deposit invoice for deal {{ $('Get deal').item.json.properties?.dealname?.value }} was not created or sent: {{ (() => { const e = $json.error; if (typeof e === 'string') return e + ($json.error_description ? ' ' + $json.error_description : ''); const raw = String(e?.message ?? ''); try { const d = JSON.parse(JSON.parse(raw.slice(raw.indexOf('\"')))).detail; return typeof d === 'string' ? d : [d.message].concat((d.errors || []).map(x => x.field + ': ' + x.message)).join(' '); } catch (err) { return raw || 'see the n8n execution'; } })() }}"
+      },
+      "id": "c3d5607e-48e0-42ee-a6d3-f78b168dc4d1",
+      "name": "Stop: invoice failed",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [
+        2880,
+        140
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Self-hosted n8n only:** this version uses the community node `n8n-nodes-ashdocs` (n8n verification pending), so it runs on self-hosted n8n. The HTTP version of the same template uses only built-in nodes and also runs on n8n Cloud.\n\n\n## Create a deposit invoice when a HubSpot deal is won with ASHDOCS\n\nAgencies, consultants and B2B services teams that sell in HubSpot and ask for a deposit before work starts.\n\n### How it works\n1. The **HubSpot Trigger** fires when a deal’s stage changes; **Deal won** keeps only `closedwon`.\n2. The workflow reads the deal, its company and its contact from HubSpot.\n3. ASHDOCS finds or creates the customer, then **Create deposit invoice** makes an invoice for the deal amount with a deposit (ASHDOCS `deposit`, a percentage set in **Settings**) due now, and emails it.\n4. The pay link and invoice number are written to two deal properties, so the deal owner can see them in HubSpot.\n5. If the contact has no email, or the invoice cannot be created or sent, the execution stops with a clear error so it shows up in your n8n executions (and your error workflow, if you have one).\n\n### Requirements\n- An ASHDOCS account (https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=hubspot-deal-won-deposit). Works on every ASHDOCS plan, including Free (100 credits a month).\n- A HubSpot account\n- Self-hosted n8n with the community node `n8n-nodes-ashdocs` installed\n\n[ASHDOCS](https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=hubspot-deal-won-deposit) · [Docs](https://www.ashdocs.com/docs)",
+        "height": 680,
+        "width": 540,
+        "color": 1
+      },
+      "id": "2977e948-ad81-4400-aa53-5a578636a85c",
+      "name": "Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -1160,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Setup\n**Plan:** Works on every ASHDOCS plan, including Free (100 credits a month).\n\n1. Create an ASHDOCS account at https://www.ashdocs.com/?utm_source=n8n&utm_medium=template&utm_campaign=hubspot-deal-won-deposit and create an API key on the **API Keys** page of the dashboard. A test key makes watermarked test invoices while you try the workflow.\n2. Install the ASHDOCS community node: **Settings → Community nodes → Install**, enter `n8n-nodes-ashdocs`. Then open any ASHDOCS node and create the **ASHDOCS API** credential with your key.\n3. HubSpot trigger: create a HubSpot developer app and connect it in **Deal stage changed** (credential **HubSpot developer app**; n8n’s HubSpot Trigger docs walk through it).\n4. HubSpot actions: create a private app with the CRM deals, companies and contacts read and write scopes and connect its token in **Get deal**, **Get company**, **Get contact** and **Save pay link on deal** (credential **HubSpot account**).\n5. In HubSpot, create two deal properties: **ashdocs_pay_link** (single-line text) and **ashdocs_invoice_number** (single-line text).\n6. Fill in **Settings**: deposit percentage, currency and payment terms.",
+        "height": 480,
+        "width": 480,
+        "color": 5
+      },
+      "id": "7f663ea6-a715-4f4e-ae0c-4752c6c64f76",
+      "name": "Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -580,
+        -300
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Customize\n- Use a flat deposit instead: set `deposit` to `{\"type\": \"flat\", \"value\": \"500.00\"}` in **Create deposit invoice**.\n- Invoice line items instead of one line: read the deal’s line items with another HubSpot node and map them.\n- Create a HubSpot note or task with the pay link instead of (or as well as) the deal properties.",
+        "height": 240,
+        "width": 480,
+        "color": 4
+      },
+      "id": "ed20a841-7f1f-4199-ae7e-65f3e679dec3",
+      "name": "Customize",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -580,
+        220
+      ]
+    }
+  ],
+  "pinData": {
+    "Deal stage changed": [
+      {
+        "json": {
+          "eventId": 4012345678,
+          "subscriptionId": 2100001,
+          "portalId": 40000001,
+          "appId": 3000001,
+          "occurredAt": 1791968400000,
+          "subscriptionType": "deal.propertyChange",
+          "attemptNumber": 0,
+          "objectId": 18200000001,
+          "propertyName": "dealstage",
+          "propertyValue": "closedwon",
+          "changeSource": "CRM_UI"
+        }
+      }
+    ]
+  },
+  "connections": {
+    "Deal stage changed": {
+      "main": [
+        [
+          {
+            "node": "Deal won",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Deal won": {
+      "main": [
+        [
+          {
+            "node": "Settings",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Settings": {
+      "main": [
+        [
+          {
+            "node": "Get deal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get deal": {
+      "main": [
+        [
+          {
+            "node": "Get company",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get company": {
+      "main": [
+        [
+          {
+            "node": "Get contact",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get contact": {
+      "main": [
+        [
+          {
+            "node": "Contact has an email?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Contact has an email?": {
+      "main": [
+        [
+          {
+            "node": "Find or create customer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop: no contact email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Find or create customer": {
+      "main": [
+        [
+          {
+            "node": "Create deposit invoice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create deposit invoice": {
+      "main": [
+        [
+          {
+            "node": "Invoice created?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice created?": {
+      "main": [
+        [
+          {
+            "node": "Send invoice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop: invoice failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send invoice": {
+      "main": [
+        [
+          {
+            "node": "Invoice sent?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Invoice sent?": {
+      "main": [
+        [
+          {
+            "node": "Save pay link on deal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Stop: invoice failed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "meta": {
+    "templateCredsSetupCompleted": false
+  },
+  "tags": []
+}
