@@ -123,3 +123,31 @@ test('file links: file_url, URL-to-PDF job envelope, and local storage paths', (
 	);
 	assert.equal(s.resultFileUrl({ job_id: 'job_x' }, base), undefined);
 });
+
+test('API error details: n8n 2.x NodeApiError context, older response bodies, plain detail', () => {
+	const body = {
+		detail: {
+			code: 'validation_failed',
+			message: 'The request failed validation.',
+			errors: [{ field: 'line_items.0.unit_price', message: 'Input should be a valid decimal' }],
+		},
+	};
+	const want = {
+		message: 'The request failed validation.',
+		description: 'line_items.0.unit_price: Input should be a valid decimal',
+	};
+	// n8n 2.x: httpRequestWithAuthentication throws a NodeApiError with the body in context.data.
+	assert.deepEqual(s.apiErrorDetails({ message: 'Your request is invalid', context: { data: body } }), want);
+	// Older request errors.
+	assert.deepEqual(s.apiErrorDetails({ response: { body } }), want);
+	assert.deepEqual(s.apiErrorDetails({ response: { data: body } }), want);
+	assert.deepEqual(s.apiErrorDetails({ description: JSON.stringify(body) }), want);
+	assert.deepEqual(s.apiErrorDetails({ context: { data: { detail: 'Invoice not found.' } } }), {
+		message: 'Invoice not found.',
+	});
+	assert.deepEqual(s.apiErrorDetails({ context: { data: { detail: { message: 'Only a draft can be deleted.' } } } }), {
+		message: 'Only a draft can be deleted.',
+	});
+	assert.deepEqual(s.apiErrorDetails(new Error('socket hang up')), {});
+	assert.deepEqual(s.apiErrorDetails(undefined), {});
+});

@@ -1,6 +1,6 @@
 {
 	"name": "n8n-nodes-ashdocs",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "ASHDOCS invoicing for n8n: create, send and look up invoices, manage customers, generate and redact PDFs, and trigger on invoice sent, viewed, paid and overdue.",
 	"license": "MIT",
 	"homepage": "https://github.com/ashwin191855/n8n-nodes-ashdocs#readme",

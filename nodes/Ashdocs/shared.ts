@@ -143,6 +143,40 @@ export const sameEmail = (a: unknown, b: unknown) =>
 	typeof b === 'string' &&
 	a.trim().toLowerCase() === b.trim().toLowerCase();
 
+/** The API's error message and field errors from a failed request. The ASHDOCS API answers
+ * {"detail": {"code", "message", "errors": [{"field", "message"}]}} (or {"detail": "text"}). Where that
+ * body sits depends on the n8n version: `context.data` on the NodeApiError n8n 2.x throws,
+ * `response.body` or `response.data` on older request errors, or `description`. */
+export function apiErrorDetails(error: unknown): { message?: string; description?: string } {
+	const e = (error ?? {}) as Json;
+	const response = (e.response ?? {}) as Json;
+	const context = (e.context ?? {}) as Json;
+	const candidates = [context.data, response.body, response.data, e.description];
+	for (const c of candidates) {
+		let data = c;
+		if (typeof data === 'string') {
+			try {
+				data = JSON.parse(data);
+			} catch {
+				continue;
+			}
+		}
+		if (!data || typeof data !== 'object' || !('detail' in data)) continue;
+		const detail = (data as Json).detail;
+		if (typeof detail === 'string') return { message: detail };
+		if (detail && typeof detail === 'object') {
+			const d = detail as Json;
+			const errors = Array.isArray(d.errors) ? (d.errors as Array<{ field?: unknown; message?: unknown }>) : [];
+			const description = errors.length
+				? errors.map((x) => (x.field ? `${String(x.field)}: ${String(x.message)}` : String(x.message))).join('; ')
+				: undefined;
+			const message = typeof d.message === 'string' ? d.message : undefined;
+			return { ...(message ? { message } : {}), ...(description ? { description } : {}) };
+		}
+	}
+	return {};
+}
+
 /** The ten most-used invoice fields, flattened (the node's Simplify option). */
 export function simplifyInvoice(inv: Json): Json {
 	const customer = (inv.customer ?? {}) as Json;

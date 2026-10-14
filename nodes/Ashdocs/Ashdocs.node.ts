@@ -97,7 +97,15 @@ export class Ashdocs implements INodeType {
 				for (const r of results) out.push({ ...r, pairedItem: { item: i } });
 			} catch (error) {
 				if (this.continueOnFail()) {
-					out.push({ json: { error: (error as Error).message }, pairedItem: { item: i } });
+					// `error_description` carries the API's field errors (for example "line_items.0.unit_price: …").
+					const description = (error as { description?: unknown }).description;
+					out.push({
+						json: {
+							error: (error as Error).message,
+							...(typeof description === 'string' && description ? { error_description: description } : {}),
+						},
+						pairedItem: { item: i },
+					});
 					continue;
 				}
 				// Both constructors hand back an error that is already theirs (with the API's message intact).

@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.0.1
+
+- Fix: API error messages reach the user again. On n8n 2.x the request helper already throws a
+  `NodeApiError`, and wrapping it again kept n8n's generic text ("Your request is invalid or could not
+  be processed by the service"). The ASHDOCS message and field errors (for example
+  `line_items.0.unit_price: Input should be a valid decimal`) are now set on the error itself, read from
+  wherever the n8n version puts the response body.
+- With **Continue on Fail**, a failed item now also carries `error_description` (the field errors) next
+  to `error`.
+
 ## 1.0.0
 
 First public release.

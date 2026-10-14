@@ -9,6 +9,8 @@ import type {
 } from 'n8n-workflow';
 import { NodeApiError } from 'n8n-workflow';
 
+import { apiErrorDetails } from './shared';
+
 type Ctx = IExecuteFunctions | IHookFunctions | ILoadOptionsFunctions;
 
 export async function baseUrl(this: Ctx): Promise<string> {
@@ -41,22 +43,13 @@ export async function ashdocsRequest(
 			options,
 		)) as IDataObject;
 	} catch (error) {
-		const response = (error as JsonObject).response as JsonObject | undefined;
-		const data = (response?.body ?? (error as JsonObject).description) as JsonObject | undefined;
-		const detail = (data && typeof data === 'object' ? data.detail : undefined) as
-			| JsonObject
-			| string
-			| undefined;
-		let message: string | undefined;
-		let description: string | undefined;
-		if (detail && typeof detail === 'object') {
-			message = detail.message as string | undefined;
-			const errors = detail.errors as Array<{ field?: string; message?: string }> | undefined;
-			if (Array.isArray(errors) && errors.length) {
-				description = errors.map((e) => `${e.field}: ${e.message}`).join('; ');
-			}
-		} else if (typeof detail === 'string') {
-			message = detail;
+		const { message, description } = apiErrorDetails(error);
+		// n8n 2.x already throws a NodeApiError here, and wrapping one in a new NodeApiError hands back
+		// the original unchanged (options ignored), so set the API's message on it first.
+		if (error instanceof NodeApiError) {
+			if (message) error.message = message;
+			if (description) error.description = description;
+			throw new NodeApiError(this.getNode(), error as unknown as JsonObject);
 		}
 		throw new NodeApiError(this.getNode(), error as JsonObject, {
 			...(message ? { message } : {}),
